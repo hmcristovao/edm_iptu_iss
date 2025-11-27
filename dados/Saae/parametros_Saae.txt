@@ -1,0 +1,14 @@
+Pasta: ..\dados\Saae
+Saída: Saae.csv
+Sufixo: Saae
+Variáveis:
+10 Ligação: codigoLigacao
+1  Cliente: nomeCliente
+2  Documento: cpf, cpfValido, cnpj, cnpjValido
+3  Contato: telefone
+4  Tipo do logradouro: tipoLogradouro
+5  Logradouro: logradouro
+6  Número: numero
+7  Bairro: bairro
+8  Complemento: complemento
+9  CEP: cep

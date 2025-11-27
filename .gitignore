@@ -1,7 +1,3 @@
-# Ignorar a pasta de dados inteira
-dados/
-dados/**
-
 # Arquivos de dados (caso apareçam fora da pasta dados)
 *.csv
 *.tsv
@@ -10,3 +6,6 @@ dados/**
 *.xlsm
 *.xlsb
 *.ods
+
+#venv
+venv/
