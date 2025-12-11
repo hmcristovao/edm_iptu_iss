@@ -1,5 +1,6 @@
 name: 🧪 Testes Pytest (CI/CD)
 
+# Roda em pushs e Pull Requests para a branch principal (main)
 on:
   push:
     branches: [ "main" ]
@@ -8,32 +9,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Usaremos 'build' aqui para corresponder aos logs de erro que você enviou,
-  # garantindo consistência com o que o runner está chamando.
+  # Usaremos 'build' para consistência com seus logs de erro anteriores
   build: 
     name: 🐍 Testes Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     
+    # Executa o mesmo job em diferentes versões do Python
     strategy:
       matrix:
         python-version: [ '3.10', '3.11', '3.12' ]
 
     steps:
     - name: ⬇️ Checkout do Repositório
+      # Baixa seu código.
       uses: actions/checkout@v4
 
-    # MUDANÇA CRÍTICA: Usando a versão v4 para maior tolerância de cache
     - name: 🛠️ Configurar Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4 # <-- ALTERADO PARA V4
+      uses: actions/setup-python@v4 # Usando v4, que é menos rigorosa
       with:
         python-version: ${{ matrix.python-version }}
+        # Linha CRÍTICA: Desativa o cache explicitamente para IGNORAR a busca por requirements.txt.
+        cache: 'none' 
 
     - name: 📦 Instalar Ferramentas de Teste (Pytest, Pandas, Mock)
       run: |
+        # Garante que o pip esteja atualizado
         python -m pip install --upgrade pip
-        # Instala as dependências necessárias para os seus testes
+        
+        # Instala as dependências de teste diretamente
         pip install pytest pandas mock
 
     - name: 🧪 Executar Testes
       run: |
+        # Executa o pytest com modo detalhado (verbose)
         pytest -v --log-cli-level=INFO
