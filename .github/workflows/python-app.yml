@@ -1,0 +1,58 @@
+name: Python Pytest Tests
+
+# Define quando o workflow deve ser executado
+on:
+  push:
+    branches: [ "padronizacao" ] # Executa em push para a branch 'main'
+  pull_request:
+    branches: [ "padronizacao" ] # Executa em PRs direcionados à branch 'main'
+  # Permite que você execute o workflow manualmente na interface do GitHub
+  workflow_dispatch:
+
+jobs:
+  # O nome do job
+  build:
+    # O ambiente onde o código será executado (usando a última versão do Ubuntu)
+    runs-on: ubuntu-latest
+    
+    # Estratégia para testar em múltiplas versões do Python
+    strategy:
+      matrix:
+        python-version: [ '3.10', '3.11', '3.12' ]
+
+    steps:
+    - name: ⬇️ Checkout do Código
+      # Ação para baixar seu código do repositório
+      uses: actions/checkout@v4
+
+    - name: 🛠️ Setup da Versão Python ${{ matrix.python-version }}
+      # Ação para configurar a versão específica do Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip' # Ativa o cache para dependências
+
+    - name: 📦 Instalar Dependências
+      run: |
+        # Atualiza o pip
+        python -m pip install --upgrade pip
+        
+        # Instala as dependências do projeto listadas em requirements.txt
+        # (Assumindo que você tem um arquivo requirements.txt)
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        
+        # Instala as ferramentas de teste (pytest, mock)
+        pip install pytest pandas mock
+        
+        # Se você usa o pytest-cov para cobertura, adicione-o aqui:
+        # pip install pytest-cov
+
+    - name: 🧪 Executar Testes com Pytest
+      run: |
+        # O comando principal para rodar o Pytest
+        # -v: Modo verbose (detalhado)
+        # --log-cli-level=INFO: Exibe logs informativos durante o teste
+        pytest -v --log-cli-level=INFO
+        
+        # Se você estiver usando o pytest-cov, use:
+        # pytest --cov=. --cov-report=xml
