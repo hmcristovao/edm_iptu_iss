@@ -1,51 +1,39 @@
 name: 🧪 Testes Pytest (CI/CD)
 
-# Define os gatilhos para o workflow:
-# Roda em pushes e Pull Requests para a branch principal (main)
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  # Permite execução manual
   workflow_dispatch:
 
 jobs:
-  run_tests:
+  # Usaremos 'build' aqui para corresponder aos logs de erro que você enviou,
+  # garantindo consistência com o que o runner está chamando.
+  build: 
     name: 🐍 Testes Python ${{ matrix.python-version }}
-    # O ambiente de execução
     runs-on: ubuntu-latest
     
-    # Executa o mesmo job em diferentes versões do Python
     strategy:
       matrix:
         python-version: [ '3.10', '3.11', '3.12' ]
 
     steps:
     - name: ⬇️ Checkout do Repositório
-      # Baixa seu código
       uses: actions/checkout@v4
 
+    # MUDANÇA CRÍTICA: Usando a versão v4 para maior tolerância de cache
     - name: 🛠️ Configurar Python ${{ matrix.python-version }}
-      # Configura o ambiente Python. O parâmetro 'cache' foi removido para evitar o erro.
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4 # <-- ALTERADO PARA V4
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: 📦 Instalar Ferramentas de Teste (Pytest, Pandas, Mock)
       run: |
-        # Atualiza o pip e instala as dependências necessárias para os testes.
         python -m pip install --upgrade pip
-        
-        # Instala as dependências listadas no seu código de teste
+        # Instala as dependências necessárias para os seus testes
         pip install pytest pandas mock
 
     - name: 🧪 Executar Testes
-      # Assume que os arquivos de teste estão no diretório de trabalho padrão.
       run: |
-        # -v: verbose (detalhado)
-        # --log-cli-level=INFO: Exibe logs
         pytest -v --log-cli-level=INFO
-        
-        # Exemplo se você quiser rodar apenas um subdiretório:
-        # pytest tests/
