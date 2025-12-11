@@ -1,7 +1,7 @@
 import pandas as pd
 import glob
 import os
-from Anonimizador import AnonimizadorReversivel
+from src.Anonimizador import AnonimizadorReversivel
 
 
 class ProcessadorSaae:
