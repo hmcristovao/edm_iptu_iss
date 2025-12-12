@@ -1,6 +1,5 @@
 name: 🧪 Testes Pytest (CI/CD)
 
-# Roda em pushs e Pull Requests para a branch principal (main)
 on:
   push:
     branches: [ "main" ]
@@ -9,36 +8,50 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Usaremos 'build' para consistência com seus logs de erro anteriores
-  build: 
+  build:
     name: 🐍 Testes Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    
-    # Executa o mesmo job em diferentes versões do Python
+
     strategy:
       matrix:
         python-version: [ '3.12' ]
 
     steps:
     - name: ⬇️ Checkout do Repositório
-      # Baixa seu código.
       uses: actions/checkout@v4
 
     - name: 🛠️ Configurar Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4 # Usando v4, que é menos rigorosa
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
 
-
     - name: 📦 Instalar Ferramentas de Teste (Pytest, Pandas, Mock)
       run: |
-        # Garante que o pip esteja atualizado
         python -m pip install --upgrade pip
-        
-        # Instala as dependências de teste diretamente
+        # Se tiver requirements.txt use: pip install -r requirements.txt
         pip install pytest pandas mock
 
-    - name: 🧪 Executar Testes
+    - name: 🧪 Executar Testes (debug + executar em src/test)
       run: |
-        # Executa o pytest com modo detalhado (verbose)
-        pytest -v --log-cli-level=INFO
+        echo "=== Repo root ==="
+        pwd
+        echo "=== Lista top-level ==="
+        ls -la
+
+        echo "=== Encontrando arquivos de teste em src ==="
+        find src -maxdepth 6 -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print || true
+
+        echo "=== Conteúdo de src/test (se existir) ==="
+        if [ -d src/test ]; then
+          ls -la src/test || true
+        else
+          echo "Diretório src/test não encontrado"
+        fi
+
+        echo "=== Pytest collect-only (apontando para src/test) ==="
+        # collect-only retorna não-zero se não encontrar nada, então não abortamos aqui
+        pytest --collect-only -q src/test || true
+
+        echo "=== Executando pytest em src/test ==="
+        # Rodar testes diretamente no diretório de testes; sem || true para que o job falhe em caso de falha nos testes
+        pytest -v --log-cli-level=INFO src/test
