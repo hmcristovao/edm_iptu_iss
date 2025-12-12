@@ -22,10 +22,10 @@ jobs:
     steps:
     - name: ⬇️ Checkout do Repositório
       # Baixa seu código.
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
 
     - name: 🛠️ Configurar Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5 # Usando v4, que é menos rigorosa
+      uses: actions/setup-python@v4 # Usando v4, que é menos rigorosa
       with:
         python-version: ${{ matrix.python-version }}
         # Linha CRÍTICA: Desativa o cache explicitamente para IGNORAR a busca por requirements.txt.
