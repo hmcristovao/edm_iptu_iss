@@ -28,8 +28,7 @@ jobs:
       uses: actions/setup-python@v4 # Usando v4, que é menos rigorosa
       with:
         python-version: ${{ matrix.python-version }}
-        # Linha CRÍTICA: Desativa o cache explicitamente para IGNORAR a busca por requirements.txt.
-        cache: 'none' 
+
 
     - name: 📦 Instalar Ferramentas de Teste (Pytest, Pandas, Mock)
       run: |
