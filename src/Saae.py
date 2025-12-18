@@ -5,7 +5,7 @@ from src.Anonimizador import AnonimizadorReversivel
 
 
 class ProcessadorSaae:
-    def __init__(self, pasta):
+    def __init__(self, pasta) :
         self.pasta = pasta
         self.anon = AnonimizadorReversivel()
 
