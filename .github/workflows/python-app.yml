@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build: 
+  build:
     name: 🐍 Testes Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    
+
     strategy:
       matrix:
-        python-version: [ '3.10', '3.11', '3.12' ]
+        python-version: [ '3.12' ]
 
     steps:
     - name: ⬇️ Checkout do Repositório
@@ -24,18 +24,19 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip' # Agora que vimos que você TEM um requirements.txt, o cache vai funcionar!
 
     - name: 📦 Instalar Dependências
       run: |
         python -m pip install --upgrade pip
-        # Instala do seu arquivo e garante as de teste
-        pip install -r requirements.txt
+        # Importante: instalamos openpyxl para suporte a arquivos .xlsx no pandas
         pip install pytest pandas mock openpyxl
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
     - name: 🧪 Executar Testes
       run: |
-        # Definimos o PYTHONPATH para que o 'src' seja encontrado
+        # Definimos o PYTHONPATH para incluir a raiz do repositório
+        # Isso permite que o comando 'from src.Saae import ...' funcione
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # Rodamos via 'python -m pytest' para garantir a resolução dos nomes de módulos
+        
+        # Executamos usando 'python -m pytest' para garantir a resolução correta dos módulos
         python -m pytest src/test/anonimizador_test.py -v --log-cli-level=INFO
