@@ -8,13 +8,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build: 
     name: 🐍 Testes Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-
+    
     strategy:
       matrix:
-        python-version: [ '3.12' ]
+        python-version: [ '3.10', '3.11', '3.12' ]
 
     steps:
     - name: ⬇️ Checkout do Repositório
@@ -24,34 +24,18 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
+        cache: 'pip' # Agora que vimos que você TEM um requirements.txt, o cache vai funcionar!
 
-    - name: 📦 Instalar Ferramentas de Teste (Pytest, Pandas, Mock)
+    - name: 📦 Instalar Dependências
       run: |
         python -m pip install --upgrade pip
-        # Se tiver requirements.txt use: pip install -r requirements.txt
-        pip install pytest pandas mock
+        # Instala do seu arquivo e garante as de teste
+        pip install -r requirements.txt
+        pip install pytest pandas mock openpyxl
 
-    - name: 🧪 Executar Testes (debug + executar em src/test)
+    - name: 🧪 Executar Testes
       run: |
-        echo "=== Repo root ==="
-        pwd
-        echo "=== Lista top-level ==="
-        ls -la
-
-        echo "=== Encontrando arquivos de teste em src ==="
-        find src -maxdepth 6 -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print || true
-
-        echo "=== Conteúdo de src/test (se existir) ==="
-        if [ -d src/test ]; then
-          ls -la src/test || true
-        else
-          echo "Diretório src/test não encontrado"
-        fi
-
-        echo "=== Pytest collect-only (apontando para src/test) ==="
-        # collect-only retorna não-zero se não encontrar nada, então não abortamos aqui
-        pytest --collect-only -q src/test || true
-
-        echo "=== Executando pytest em src/test ==="
-        # Rodar testes diretamente no diretório de testes; sem || true para que o job falhe em caso de falha nos testes
-        pytest -v --log-cli-level=INFO src/test
+        # Definimos o PYTHONPATH para que o 'src' seja encontrado
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # Rodamos via 'python -m pytest' para garantir a resolução dos nomes de módulos
+        python -m pytest src/test/anonimizador_test.py -v --log-cli-level=INFO
