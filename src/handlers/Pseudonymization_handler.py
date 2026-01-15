@@ -1,8 +1,13 @@
+import logging
+
 from src.Domain.Package import Package
 from src.handlers.Handler import AbstractHandler
 
 
 class PseudonymizationHandler(AbstractHandler):
+    def __init__(self):
+        super().__init__()
+        self.logger = logging.getLogger(self.__class__.__name__)
     def anonimizar(self, df, colDado, colValido):
         def processar(row):
             valor = row[colDado]
@@ -29,8 +34,8 @@ class PseudonymizationHandler(AbstractHandler):
         return df
 
     def handle(self, request: Package) -> Package:
-        print('asdsa')
         df = request.datas
+        self.logger.info(f'Pseudonizando - {request.parameters.sufixo}')
         df = self.anonimizar(df, "cpf", "cpfValido")
         request.datas = self.anonimizar(df, "cnpj", "cnpjValido")
 

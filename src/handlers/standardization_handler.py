@@ -1,8 +1,13 @@
+import logging
+
 from src.Domain.Package import Package
 from src.handlers.Handler import AbstractHandler
 
 
 class StandardizationHandler(AbstractHandler):
+    def __init__(self):
+        super().__init__()
+        self.logger = logging.getLogger(self.__class__.__name__)
     def _renomear_colunas_mapeadas(self, df, lista_mapeamento):
         for item in lista_mapeamento:
             for nome_amigavel, colunas_tecnicas in item.items():
@@ -12,14 +17,14 @@ class StandardizationHandler(AbstractHandler):
                     col_destino = colunas_tecnicas[0]
                     if nome_amigavel in df.columns:
                         df.rename(columns={nome_amigavel: col_destino}, inplace=True)
-                        print(f"Sucesso: {nome_amigavel} renomeado para {col_destino}")
+                        self.logger.info(f"Sucesso: {nome_amigavel} renomeado para {col_destino}")
                     else:
-                        print(f"Alerta: Coluna original '{nome_amigavel}' não encontrada.")
+                        self.logger.warning(f"Alerta: Coluna original '{nome_amigavel}' não encontrada.")
 
                 # 2. Caso Complexo: Múltiplos itens (Regras de Negócio: CPF, CNPJ, etc.)
                 elif len(colunas_tecnicas) > 1:
                     if nome_amigavel not in df.columns:
-                        print(f"Pulo: Coluna '{nome_amigavel}' ausente. Não foi possível criar {colunas_tecnicas}.")
+                        self.logger.info(f"Pulo: Coluna '{nome_amigavel}' ausente. Não foi possível criar {colunas_tecnicas}.")
                         continue
 
 
@@ -29,20 +34,20 @@ class StandardizationHandler(AbstractHandler):
                     for col_alvo in colunas_tecnicas:
                         if col_alvo == 'cpf':
                             df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 11, "")
-                            print(f"Sucesso: Criada coluna CPF a partir de {nome_amigavel}")
+                            self.logger.info(f"Sucesso: Criada coluna CPF a partir de {nome_amigavel}")
 
                         elif col_alvo == 'cnpj':
                             df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 14, "")
-                            print(f"Sucesso: Criada coluna CNPJ a partir de {nome_amigavel}")
+                            self.logger.info(f"Sucesso: Criada coluna CNPJ a partir de {nome_amigavel}")
 
                         elif col_alvo == 'cpfValido':
                             df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 11, "").apply(lambda x: "S" if self.validarCpf(x) else "N")
-                            print(f"Sucesso: Criada coluna cpf valido a partir de {nome_amigavel}")
+                            self.logger.info(f"Sucesso: Criada coluna cpf valido a partir de {nome_amigavel}")
                         elif col_alvo == 'cnpjValido':
                             df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 14, "").apply(lambda x: "S" if self.validarCnpj(x) else "N")
-                            print(f"Sucesso: Criada coluna cnpj valido a partir de {nome_amigavel}")
+                            self.logger.info(f"Sucesso: Criada coluna cnpj valido a partir de {nome_amigavel}")
                         else :
-                            print(f"Atenção: Nenhuma regra específica aplicada para a coluna '{nome_amigavel}' (Alvos: {col_alvo})")
+                            self.logger.warning(f"Atenção: Nenhuma regra específica aplicada para a coluna '{nome_amigavel}' (Alvos: {col_alvo})")
 
 
 
@@ -52,7 +57,7 @@ class StandardizationHandler(AbstractHandler):
                         df.drop(columns=[nome_amigavel], inplace=True)
 
                 else:
-                    print(f"Erro: A chave '{nome_amigavel}' está vazia no mapeamento.")
+                    self.logger.error(f"Erro: A chave '{nome_amigavel}' está vazia no mapeamento.")
 
         return df
     @staticmethod

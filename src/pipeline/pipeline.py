@@ -6,13 +6,23 @@ from src.handlers.export_handler import ExportHandler
 from src.handlers.extractor_handler import ExtractorHandler
 from src.handlers.standardization_handler import StandardizationHandler
 from src.usecase.leitor import ParameterReader
+import logging
+
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - [%(name)s] %(message)s',
+        handlers=[
+            logging.FileHandler("processamento_saae.log", encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
+
     raiz_projeto = Path(__file__).resolve().parent.parent.parent
     caminho_txt = raiz_projeto / 'dados' / 'Saae' / 'parametros_Saae.txt'
 
     parameter = ParameterReader(caminho_txt).ler_arquivo()
-    print(parameter.variaveis)
     package = Package(parameter)
 
 

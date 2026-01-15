@@ -1,0 +1,93 @@
+2026-01-15 00:37:33,157 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:37:33,436 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:38:51,959 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:38:52,193 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:38:52,194 - INFO - [StandardizationHandler] Sucesso: Ligação renomeado para codigoLigacao
+2026-01-15 00:38:52,194 - INFO - [StandardizationHandler] Sucesso: Cliente renomeado para nomeCliente
+2026-01-15 00:38:52,197 - INFO - [StandardizationHandler] Sucesso: Criada coluna CPF a partir de Documento
+2026-01-15 00:38:52,198 - INFO - [StandardizationHandler] Sucesso: Criada coluna cpf valido a partir de Documento
+2026-01-15 00:38:52,199 - INFO - [StandardizationHandler] Sucesso: Criada coluna CNPJ a partir de Documento
+2026-01-15 00:38:52,201 - INFO - [StandardizationHandler] Sucesso: Criada coluna cnpj valido a partir de Documento
+2026-01-15 00:38:52,202 - INFO - [StandardizationHandler] Sucesso: Contato renomeado para telefone
+2026-01-15 00:38:52,202 - INFO - [StandardizationHandler] Sucesso: Tipo do logradouro renomeado para tipoLogradouro
+2026-01-15 00:38:52,203 - INFO - [StandardizationHandler] Sucesso: Logradouro renomeado para logradouro
+2026-01-15 00:38:52,203 - INFO - [StandardizationHandler] Sucesso: Número renomeado para numero
+2026-01-15 00:38:52,203 - INFO - [StandardizationHandler] Sucesso: Bairro renomeado para bairro
+2026-01-15 00:38:52,204 - INFO - [StandardizationHandler] Sucesso: Complemento renomeado para complemento
+2026-01-15 00:38:52,204 - INFO - [StandardizationHandler] Sucesso: CEP renomeado para cep
+2026-01-15 00:41:56,923 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:41:57,154 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:41:57,155 - INFO - [StandardizationHandler] Sucesso: Ligação renomeado para codigoLigacao
+2026-01-15 00:41:57,155 - INFO - [StandardizationHandler] Sucesso: Cliente renomeado para nomeCliente
+2026-01-15 00:41:57,157 - INFO - [StandardizationHandler] Sucesso: Criada coluna CPF a partir de Documento
+2026-01-15 00:41:57,158 - INFO - [StandardizationHandler] Sucesso: Criada coluna cpf valido a partir de Documento
+2026-01-15 00:41:57,159 - INFO - [StandardizationHandler] Sucesso: Criada coluna CNPJ a partir de Documento
+2026-01-15 00:41:57,159 - INFO - [StandardizationHandler] Sucesso: Criada coluna cnpj valido a partir de Documento
+2026-01-15 00:41:57,160 - INFO - [StandardizationHandler] Sucesso: Contato renomeado para telefone
+2026-01-15 00:41:57,161 - INFO - [StandardizationHandler] Sucesso: Tipo do logradouro renomeado para tipoLogradouro
+2026-01-15 00:41:57,161 - INFO - [StandardizationHandler] Sucesso: Logradouro renomeado para logradouro
+2026-01-15 00:41:57,161 - INFO - [StandardizationHandler] Sucesso: Número renomeado para numero
+2026-01-15 00:41:57,161 - INFO - [StandardizationHandler] Sucesso: Bairro renomeado para bairro
+2026-01-15 00:41:57,162 - INFO - [StandardizationHandler] Sucesso: Complemento renomeado para complemento
+2026-01-15 00:41:57,162 - INFO - [StandardizationHandler] Sucesso: CEP renomeado para cep
+2026-01-15 00:41:57,162 - INFO - [PseudonymizationHandler] Pseudonizando - ['Saae']
+2026-01-15 00:41:57,163 - INFO - [ExportHandler] Salvando - ['Saae']
+2026-01-15 00:41:57,166 - INFO - [ExportHandler] Arquivos gerados:
+2026-01-15 00:41:57,167 - INFO - [ExportHandler] Saae.csv
+2026-01-15 00:43:34,409 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:43:34,409 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:43:34,647 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:43:34,647 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:43:34,648 - INFO - [StandardizationHandler] Sucesso: Ligação renomeado para codigoLigacao
+2026-01-15 00:43:34,648 - INFO - [StandardizationHandler] Sucesso: Ligação renomeado para codigoLigacao
+2026-01-15 00:43:34,648 - INFO - [StandardizationHandler] Sucesso: Cliente renomeado para nomeCliente
+2026-01-15 00:43:34,648 - INFO - [StandardizationHandler] Sucesso: Cliente renomeado para nomeCliente
+2026-01-15 00:43:34,650 - INFO - [StandardizationHandler] Sucesso: Criada coluna CPF a partir de Documento
+2026-01-15 00:43:34,650 - INFO - [StandardizationHandler] Sucesso: Criada coluna CPF a partir de Documento
+2026-01-15 00:43:34,652 - INFO - [StandardizationHandler] Sucesso: Criada coluna cpf valido a partir de Documento
+2026-01-15 00:43:34,652 - INFO - [StandardizationHandler] Sucesso: Criada coluna cpf valido a partir de Documento
+2026-01-15 00:43:34,653 - INFO - [StandardizationHandler] Sucesso: Criada coluna CNPJ a partir de Documento
+2026-01-15 00:43:34,653 - INFO - [StandardizationHandler] Sucesso: Criada coluna CNPJ a partir de Documento
+2026-01-15 00:43:34,654 - INFO - [StandardizationHandler] Sucesso: Criada coluna cnpj valido a partir de Documento
+2026-01-15 00:43:34,654 - INFO - [StandardizationHandler] Sucesso: Criada coluna cnpj valido a partir de Documento
+2026-01-15 00:43:34,655 - INFO - [StandardizationHandler] Sucesso: Contato renomeado para telefone
+2026-01-15 00:43:34,655 - INFO - [StandardizationHandler] Sucesso: Contato renomeado para telefone
+2026-01-15 00:43:34,655 - INFO - [StandardizationHandler] Sucesso: Tipo do logradouro renomeado para tipoLogradouro
+2026-01-15 00:43:34,655 - INFO - [StandardizationHandler] Sucesso: Tipo do logradouro renomeado para tipoLogradouro
+2026-01-15 00:43:34,656 - INFO - [StandardizationHandler] Sucesso: Logradouro renomeado para logradouro
+2026-01-15 00:43:34,656 - INFO - [StandardizationHandler] Sucesso: Logradouro renomeado para logradouro
+2026-01-15 00:43:34,656 - INFO - [StandardizationHandler] Sucesso: Número renomeado para numero
+2026-01-15 00:43:34,656 - INFO - [StandardizationHandler] Sucesso: Número renomeado para numero
+2026-01-15 00:43:34,657 - INFO - [StandardizationHandler] Sucesso: Bairro renomeado para bairro
+2026-01-15 00:43:34,657 - INFO - [StandardizationHandler] Sucesso: Bairro renomeado para bairro
+2026-01-15 00:43:34,657 - INFO - [StandardizationHandler] Sucesso: Complemento renomeado para complemento
+2026-01-15 00:43:34,657 - INFO - [StandardizationHandler] Sucesso: Complemento renomeado para complemento
+2026-01-15 00:43:34,658 - INFO - [StandardizationHandler] Sucesso: CEP renomeado para cep
+2026-01-15 00:43:34,658 - INFO - [StandardizationHandler] Sucesso: CEP renomeado para cep
+2026-01-15 00:43:34,658 - INFO - [PseudonymizationHandler] Pseudonizando - ['Saae']
+2026-01-15 00:43:34,658 - INFO - [PseudonymizationHandler] Pseudonizando - ['Saae']
+2026-01-15 00:43:34,659 - INFO - [ExportHandler] Salvando - ['Saae']
+2026-01-15 00:43:34,659 - INFO - [ExportHandler] Salvando - ['Saae']
+2026-01-15 00:43:34,662 - INFO - [ExportHandler] Arquivos gerados:
+2026-01-15 00:43:34,662 - INFO - [ExportHandler] Arquivos gerados:
+2026-01-15 00:43:34,663 - INFO - [ExportHandler] Saae.csv
+2026-01-15 00:43:34,663 - INFO - [ExportHandler] Saae.csv
+2026-01-15 00:44:10,719 - INFO - [ExtractorHandler] Buscando em: C:\Users\douglas\Desktop\edm_iptu_iss\dados\Saae
+2026-01-15 00:44:10,960 - INFO - [ExtractorHandler] Arquivo carregado: Saae.xlsx
+2026-01-15 00:44:10,960 - INFO - [StandardizationHandler] Sucesso: Ligação renomeado para codigoLigacao
+2026-01-15 00:44:10,960 - INFO - [StandardizationHandler] Sucesso: Cliente renomeado para nomeCliente
+2026-01-15 00:44:10,962 - INFO - [StandardizationHandler] Sucesso: Criada coluna CPF a partir de Documento
+2026-01-15 00:44:10,963 - INFO - [StandardizationHandler] Sucesso: Criada coluna cpf valido a partir de Documento
+2026-01-15 00:44:10,964 - INFO - [StandardizationHandler] Sucesso: Criada coluna CNPJ a partir de Documento
+2026-01-15 00:44:10,965 - INFO - [StandardizationHandler] Sucesso: Criada coluna cnpj valido a partir de Documento
+2026-01-15 00:44:10,967 - INFO - [StandardizationHandler] Sucesso: Contato renomeado para telefone
+2026-01-15 00:44:10,967 - INFO - [StandardizationHandler] Sucesso: Tipo do logradouro renomeado para tipoLogradouro
+2026-01-15 00:44:10,967 - INFO - [StandardizationHandler] Sucesso: Logradouro renomeado para logradouro
+2026-01-15 00:44:10,968 - INFO - [StandardizationHandler] Sucesso: Número renomeado para numero
+2026-01-15 00:44:10,968 - INFO - [StandardizationHandler] Sucesso: Bairro renomeado para bairro
+2026-01-15 00:44:10,968 - INFO - [StandardizationHandler] Sucesso: Complemento renomeado para complemento
+2026-01-15 00:44:10,969 - INFO - [StandardizationHandler] Sucesso: CEP renomeado para cep
+2026-01-15 00:44:10,969 - INFO - [PseudonymizationHandler] Pseudonizando - ['Saae']
+2026-01-15 00:44:10,970 - INFO - [ExportHandler] Salvando - ['Saae']
+2026-01-15 00:44:10,973 - INFO - [ExportHandler] Arquivos gerados:
+2026-01-15 00:44:10,973 - INFO - [ExportHandler] Saae.csv
