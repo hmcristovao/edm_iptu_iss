@@ -1,5 +1,5 @@
-Pasta: ..\dados\Saae
-Saída: Saae.csv
+Pasta: dados/Saae
+Saída: dados/processed
 Sufixo: Saae
 Variáveis:
 10 Ligação: codigoLigacao
