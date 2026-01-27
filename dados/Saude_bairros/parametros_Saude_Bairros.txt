@@ -1,6 +1,6 @@
-Pasta: ..\dados\Saae
-Saida: Saae.csv
-Sufixo: Saae
+Pasta: ..\dados\Saude_bairros
+Saida: Saude_bairros.csv
+Sufixo: Saude_bairros
 Header: 2
 Footer: 0
 Variáveis:
