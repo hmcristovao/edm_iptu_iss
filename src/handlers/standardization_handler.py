@@ -2,6 +2,7 @@ import logging
 
 from src.Domain.Package import Package
 from src.handlers.Handler import AbstractHandler
+from src.handlers.ultis.MultivariablesHander import MultivariablesHanderBuilder
 
 
 class StandardizationHandler(AbstractHandler):
@@ -32,25 +33,7 @@ class StandardizationHandler(AbstractHandler):
                     serie_limpa = df[nome_amigavel].astype(str).str.replace(r"\D", "", regex=True)
 
                     for col_alvo in colunas_tecnicas:
-                        if col_alvo == 'cpf':
-                            df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 11, "")
-                            self.logger.info(f"Sucesso: Criada coluna CPF a partir de {nome_amigavel}")
-
-                        elif col_alvo == 'cnpj':
-                            df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 14, "")
-                            self.logger.info(f"Sucesso: Criada coluna CNPJ a partir de {nome_amigavel}")
-
-                        elif col_alvo == 'cpfValido':
-                            df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 11, "").apply(lambda x: "S" if self.validarCpf(x) else "N")
-                            self.logger.info(f"Sucesso: Criada coluna cpf valido a partir de {nome_amigavel}")
-                        elif col_alvo == 'cnpjValido':
-                            df[col_alvo] = serie_limpa.where(serie_limpa.str.len() == 14, "").apply(lambda x: "S" if self.validarCnpj(x) else "N")
-                            self.logger.info(f"Sucesso: Criada coluna cnpj valido a partir de {nome_amigavel}")
-                        else :
-                            self.logger.warning(f"Atenção: Nenhuma regra específica aplicada para a coluna '{nome_amigavel}' (Alvos: {col_alvo})")
-
-
-
+                        MultivariablesHanderBuilder().build(df, nome_amigavel,col_alvo)
 
                     # Remove a coluna original após processar as regras de documentos
                     if nome_amigavel == "Documento" and nome_amigavel in df.columns:
