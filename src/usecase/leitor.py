@@ -9,8 +9,10 @@ class ParameterReader:
         config = {
             'Pasta': '',
             'Saída': '',
-            'Footer' :int,
-            'Header' :int,
+            'Seq':None,
+            'Footer' :None,
+            'Header' :None,
+            'Formato':None,
             'Sufixo': [],
             'Variáveis': []
         }
@@ -24,12 +26,16 @@ class ParameterReader:
 
             if linha.startswith('Pasta:'):
                 config['Pasta'] = linha.split(':', 1)[1].strip()
-            elif linha.startswith('Saída :'):
+            elif linha.startswith('Saída:'):
                 config['Saída'] = linha.split(':', 1)[1].strip()
-            elif linha.startswith('Footer :'):
+            elif linha.startswith('Footer:'):
                 config['Footer'] = int(linha.split(':', 1)[1].strip())
-            elif linha.startswith('Header :'):
+            elif linha.startswith('Header:'):
                 config['Header'] = int(linha.split(':', 1)[1].strip())
+            elif linha.startswith('Seq:'):
+                config['Seq'] = str(linha.split(':', 1)[1].strip())
+            elif linha.startswith('Formato:'):
+                config['Formato'] = linha.split(':', 1)[1].strip()
             elif linha.startswith('Sufixo:'):
                 config['Sufixo'] = [linha.split(':', 1)[1].strip()]
             # Captura as linhas que começam com números (as variáveis)
@@ -47,6 +53,8 @@ class ParameterReader:
             saida=config['Saída'],
             footer=config['Footer'],
             header=config['Header'],
+            seq=config['Seq'],
             sufixo=config['Sufixo'],
+            formato=config['Formato'],
             variaveis=config['Variáveis']
         )

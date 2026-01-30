@@ -8,7 +8,11 @@ from src.handlers.standardization_handler import StandardizationHandler
 from src.usecase.leitor import ParameterReader
 import logging
 
+import sys
+import os
 
+# Adiciona o diretório atual ao path do sistema
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,

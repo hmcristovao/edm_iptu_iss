@@ -4,7 +4,7 @@ Sufixo: Saae
 Formato: xlsx
 Seq: ;
 Header: 0
-Footer: 0
+Footer: 1
 Variáveis:
 10 Ligação: codigoLigacao
 1  Cliente: nomeCliente
