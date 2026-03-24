@@ -1,0 +1,30 @@
+Input folder: ..\dados\edp_faturado
+Output folder: ..\saida
+Sufix: EdpFaturado
+Header#: 0
+Footer#: 0
+Format: csv
+CSV separator: ;
+Variables:
+MUNICIPIO : municipio
+ANO_MES : anoMes
+COD_CLASSE : codClasse
+CLASSE : classe
+GRUPO : grupo
+INSTALACAO : instalacao
+CLIENTE : cliente
+NUM_CPF : numCpf, cpfValido
+NUM_CNPJ : numCnpj, cnpjValido
+RUA : rua
+NUMERO : numero
+BAIRRO : bairro
+LOCALIDADE : localidade
+CEP : cep
+UF : uf
+PAIS : pais
+CONSUMO_FATURADO : consumoFaturado
+CONSUMO_REGISTRADO : consumoRegistrado
+CONTADOR_CIP : contadorCip
+CONTAS_FATURADAS : contasFaturadas
+RECEITA_CIP : receitaCip
+RECEITA_TOTAL : receitaTotal

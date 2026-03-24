@@ -42,10 +42,12 @@ class CPFHandler(IterHander):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        if nome_amigavel == "cpf":  # Verificando pelo nome da coluna que se deseja gerar
+        # Verifica se 'cpf' faz parte do nome desejado (ex: numCpf, cpf_limpo)
+        # E garante que NÃO seja o 'cpfValido' (que tem seu próprio handler)
+        if "cpf" in nome_amigavel.lower() and "valido" not in nome_amigavel.lower():
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len() == 11, "")
-            self.logger.info(f"Sucesso: Criada coluna CPF a partir de {col_alvo}")
+            self.logger.info(f"Sucesso: Criada coluna {nome_amigavel} (tipo CPF) a partir de {col_alvo}")
             return df
         return super().handle(df, col_alvo, nome_amigavel)
 
@@ -56,7 +58,7 @@ class CNPJHandler(IterHander):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        if nome_amigavel == "cnpj":
+        if "cnpj" in nome_amigavel.lower() and "valido" not in nome_amigavel.lower():
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len() == 14, "")
             self.logger.info(f"Sucesso: Criada coluna CNPJ a partir de {col_alvo}")

@@ -9,21 +9,24 @@ class StandardizationHandler(AbstractHandler):
     def __init__(self):
         super().__init__()
         self.logger = logging.getLogger(self.__class__.__name__)
-    def _renomear_colunas_mapeadas(self, df, lista_mapeamento):
+    def _renomear_colunas_mapeadas(self, df, lista_mapeamento, sufix):
+        self.logger.info(f"COLUNAS - {df.columns}")
         for item in lista_mapeamento:
             for nome_amigavel, colunas_tecnicas in item.items():
 
                 # 1. Caso Simples: Um único item na lista (Renomeação Direta)
                 if len(colunas_tecnicas) == 1:
-                    col_destino = colunas_tecnicas[0]
+                    col_destino = f"{colunas_tecnicas[0]}{sufix[0]}"
                     if nome_amigavel in df.columns:
-                        df.rename(columns={nome_amigavel: col_destino}, inplace=True)
+                        df.rename(columns={nome_amigavel:  col_destino  }, inplace=True)
                         self.logger.info(f"Sucesso: {nome_amigavel} renomeado para {col_destino}")
                     else:
                         self.logger.warning(f"Alerta: Coluna original '{nome_amigavel}' não encontrada.")
 
                 # 2. Caso Complexo: Múltiplos itens (Regras de Negócio: CPF, CNPJ, etc.)
                 elif len(colunas_tecnicas) > 1:
+                    if df.columns.empty:
+                        print("DataFrame não possui colunas")
                     if nome_amigavel not in df.columns:
                         self.logger.info(f"Pulo: Coluna '{nome_amigavel}' ausente. Não foi possível criar {colunas_tecnicas}.")
                         continue
@@ -36,7 +39,7 @@ class StandardizationHandler(AbstractHandler):
                         MultivariablesHanderBuilder().build(df, nome_amigavel,col_alvo)
 
                     # Remove a coluna original após processar as regras de documentos
-                    if nome_amigavel == "Documento" and nome_amigavel in df.columns:
+                    if nome_amigavel == "CPF/CNPJ" and nome_amigavel in df.columns:
                         df.drop(columns=[nome_amigavel], inplace=True)
 
                 else:
@@ -85,6 +88,6 @@ class StandardizationHandler(AbstractHandler):
         return cnpj[-2:] == f"{d1}{d2}"
 
     def handle(self, request: Package) -> Package:
-        request =Package(request.parameters, self._renomear_colunas_mapeadas(request.datas,request.parameters.variaveis))
+        request =Package(request.parameters, self._renomear_colunas_mapeadas(request.datas,request.parameters.variaveis, request.parameters.sufixo))
 
         return super().handle(request)

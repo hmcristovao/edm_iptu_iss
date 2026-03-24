@@ -1,0 +1,41 @@
+Input folder: ..\dados\educacao_responsaveis
+Output folder: ..\saida
+Sufix: EducacaoResponsaveis
+Header#: 0
+Footer#: 0
+Format: xlsx
+CSV separator: 
+Variables:
+nome : nome
+cpf : cpf, cpfValido
+data nascimento : dataNascimento
+email : email
+genero : genero
+cor_raca : corRaca
+etnia : etnia
+estado civil : estadoCivil
+deficiencia : deficiencia
+grau escolaridade : grauEscolaridade
+conjuge : conjuge
+nacionalidade : nacionalidade
+uf naturalidade : ufNaturalidade
+municipio naturalidade : municipioNaturalidade
+telefones : telefones
+rg : rg
+rg data_emissao : rgDataEmissao
+rg orgao_emissor : rgOrgaoEmissor
+rg estado_emissor : rgEstadoEmissor
+ctps numero : ctpsNumero
+ctps serie : ctpsSerie
+pis : pis
+titulo eleitor : tituloEleitor
+zona eleitor : zonaEleitor
+secao eleitor : secaoEleitor
+profissao : profissao
+endereco logradouro : enderecoLogradouro
+endereco numero : enderecoNumero
+bairro : bairro
+complemento : complemento
+cep : cep
+cidade : cidade
+estado : estado

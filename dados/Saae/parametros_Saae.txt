@@ -1,18 +1,18 @@
-Pasta: dados/Saae
-Saída: dados/processed
-Sufixo: Saae
-Formato: xlsx
-Seq: ;
-Header: 0
-Footer: 0
-Variáveis:
-10 Ligação: codigoLigacao
-1  Cliente: nomeCliente
-2  Documento: cpf, cpfValido, cnpj, cnpjValido
-3  Contato: telefone
-4  Tipo do logradouro: tipoLogradouro
-5  Logradouro: logradouro
-6  Número: numero
-7  Bairro: bairro
-8  Complemento: complemento
-9  CEP: cep
+Input folder: ..\dados\saae
+Output folder: ..\saida
+Sufix: Saae
+Header#: 2
+Footer#: 0
+Format: xlsx
+CSV separator: 
+Variables:
+Ligação : ligacao
+Cliente : cliente
+Documento : cpf, cpfValido, cnpj, cnpjValido
+Contato : contato
+Tipo do logradouro : tipoLogradouro
+Logradouro : logradouro
+Número : numero
+Bairro : bairro
+Complemento : complemento
+CEP : cep

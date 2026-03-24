@@ -1,0 +1,27 @@
+Input folder: ..\dados\saude_geral
+Output folder: ..\saida
+Sufix: SaudeGeral
+Header#: 0
+Footer#: 1
+Format: xls
+CSV separator: 
+Variables:
+PRONTUÁRIO FAMILIAR : prontuarioFamiliar
+PRONTUARIO : prontuario
+INDIVIDUO : individuo
+CPF : cpf, cpfValido
+CNS : cns
+SEXO : sexo
+DATA NASCIMENTO : dataNascimento
+IDADE : idade
+COR : cor
+DIABETICO : diabetico
+HIPERTENSO : hipertenso
+BAIRRO : bairro
+LOGRADOURO :logradouro
+UNIDADE COBERTURA : unidadeCobertura
+EQUIPE COBERTURA : equipeCobertura
+ACS COBERTURA : agenteComunitario
+CONTATO : telefone
+
+

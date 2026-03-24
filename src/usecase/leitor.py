@@ -7,54 +7,67 @@ class ParameterReader:
 
     def ler_arquivo(self) -> Parameters:
         config = {
-            'Pasta': '',
-            'Saída': '',
-            'Seq':None,
+            'Input folder': '',
+            'Output folder': '',
+            'CSV separator':None,
             'Footer' :None,
-            'Header' :None,
-            'Formato':None,
-            'Sufixo': [],
-            'Variáveis': []
+            'Header#' :None,
+            'Footer#':None,
+            'Sufix': [],
+            'Variables': []
         }
 
         with open(self.caminho, 'r', encoding='utf-8') as f:
             linhas = f.readlines()
 
+        lendo_variaveis = False
+
         for linha in linhas:
             linha = linha.strip()
-            if not linha: continue
+            if not linha:
+                continue
 
-            if linha.startswith('Pasta:'):
-                config['Pasta'] = linha.split(':', 1)[1].strip()
-            elif linha.startswith('Saída:'):
-                config['Saída'] = linha.split(':', 1)[1].strip()
-            elif linha.startswith('Footer:'):
-                config['Footer'] = int(linha.split(':', 1)[1].strip())
-            elif linha.startswith('Header:'):
-                config['Header'] = int(linha.split(':', 1)[1].strip())
-            elif linha.startswith('Seq:'):
-                config['Seq'] = str(linha.split(':', 1)[1].strip())
-            elif linha.startswith('Formato:'):
-                config['Formato'] = linha.split(':', 1)[1].strip()
-            elif linha.startswith('Sufixo:'):
-                config['Sufixo'] = [linha.split(':', 1)[1].strip()]
-            # Captura as linhas que começam com números (as variáveis)
-            elif linha[0].isdigit() and ':' in linha:
+            if linha.startswith('Input folder:'):
+                config['Input folder'] = linha.split(':', 1)[1].strip()
+
+            elif linha.startswith('Output folder:'):
+                config['Output folder'] = linha.split(':', 1)[1].strip()
+
+            elif linha.startswith('Footer#:'):
+                config['Footer#'] = int(linha.split(':', 1)[1].strip())
+
+            elif linha.startswith('Header#:'):
+                config['Header#'] = int(linha.split(':', 1)[1].strip())
+
+            elif linha.startswith('CSV separator:'):
+                config['CSV separator'] = linha.split(':', 1)[1].strip()
+
+            elif linha.startswith('Format:'):
+                config['Format'] = linha.split(':', 1)[1].strip()
+
+            elif linha.startswith('Sufix:'):
+                config['Sufix'] = [linha.split(':', 1)[1].strip()]
+
+            elif linha.startswith('Variables:'):
+                lendo_variaveis = True
+                continue
+
+            elif lendo_variaveis and ':' in linha:
                 partes = linha.split(':', 1)
-                info_base = partes[0].strip()  # Ex: "4 Ligação"
-                campos = [c.strip() for c in partes[1].split(',')]  # Ex: ["cpf", "cpfValido"]
+                chave = partes[0].strip()
+                campos = [c.strip() for c in partes[1].split(',')]
 
-                config['Variáveis'].append({
-                     " ".join(info_base.split()[1:]) : campos
+                config['Variables'].append({
+                    chave: campos
                 })
 
         return Parameters(
-            pasta=config['Pasta'],
-            saida=config['Saída'],
-            footer=config['Footer'],
-            header=config['Header'],
-            seq=config['Seq'],
-            sufixo=config['Sufixo'],
-            formato=config['Formato'],
-            variaveis=config['Variáveis']
+            pasta=config['Input folder'],
+            saida=config['Output folder'],
+            footer=config['Footer#'],
+            header=config['Header#'],
+            sep=config['CSV separator'],
+            sufixo=config['Sufix'],
+            formato=config['Format'],
+            variaveis=config['Variables']
         )

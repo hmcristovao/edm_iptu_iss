@@ -6,6 +6,11 @@
 *.xlsm
 *.xlsb
 *.ods
-
 #venv
 venv/
+src/.env
+src/.env
+src/.env
+aiflow/logs/
+logs/
+*.log

@@ -11,7 +11,7 @@ class ExportHandler(AbstractHandler):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, request: Package):
-        self.logger.info(f'Salvando - {request.parameters.sufixo}')
+        self.logger.info(f'Salvando - {request.parameters.sufixo[0]}')
 
         pasta_saida = pathlib.Path(request.parameters.saida)
 
@@ -22,8 +22,7 @@ class ExportHandler(AbstractHandler):
             raise
 
 
-        out_csv = pasta_saida / "Saae.csv"
-        print(f"Salvando - {out_csv}")
+        out_csv = pasta_saida / f"{request.parameters.sufixo[0]}.csv"
 
         request.datas.to_csv(out_csv, index=False)
 

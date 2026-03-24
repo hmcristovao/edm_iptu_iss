@@ -1,0 +1,21 @@
+input folder: ..\dados\saude_domicilios
+Output folder: ..\saida
+Sufix: SaudeDomicilios
+Header#: 0
+Footer#: 1
+Format: xls
+CSV separator: 
+Variables:
+ID IMÓVEL : idImovel
+TIPO IMÓVEL : tipoImovel
+LOCALIDADE : localidade
+QUARTEIRÃO : quarteirao
+SEQUÊNCIA : sequencia
+BAIRRO : bairro
+LOGRADOURO : logradouro
+PRONTUÁRIO FAMILIAR : prontuarioFamiliar
+PRONTUÁRIO RESPONSÁVEL : prontuarioResponsavel
+RESPONSÁVEL PELA FAMÍLIA : responsavelPelaFamilia
+EQUIPE : equipe
+MICROAREA : microArea
+QRCODE : qrCode

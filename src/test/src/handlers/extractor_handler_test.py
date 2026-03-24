@@ -8,12 +8,12 @@ from src.Domain.Parameters import Parameters
 
 mockPackege = Package(
     Parameters(
-        pasta='dados/Saae',
+        pasta='dados/Saae2',
         footer=1,
         header=0,
         formato= None,
         saida='dados/processed',
-        sufixo=['Saae'],
+        sufixo=['Saae2'],
         variaveis=[{'Ligação': ['codigoLigacao']}, {'Cliente': ['nomeCliente']},
                    {'Documento': ['cpf', 'cpfValido', 'cnpj', 'cnpjValido']}, {'Contato': ['telefone']},
                    {'Tipo do logradouro': ['tipoLogradouro']}, {'Logradouro': ['logradouro']}, {'Número': ['numero']},

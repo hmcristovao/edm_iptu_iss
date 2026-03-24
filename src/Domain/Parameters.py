@@ -1,12 +1,12 @@
 class Parameters():
-    def __init__(self, pasta: str,seq:str,footer:int, header:int, formato:str,saida: str, sufixo: list[str], variaveis: list = None):
+    def __init__(self, pasta: str,sep:str,footer:int, header:int, formato:str,saida: str, sufixo: list[str], variaveis: list = None):
         self.pasta = pasta
         self.saida = saida
         self.header =  header
         self.footer = footer
         self.sufixo = sufixo
         self.formato = formato
-        self.seq = seq
+        self.sep = sep
         self.variaveis = variaveis or []
 
     def _get_differences(self, other):

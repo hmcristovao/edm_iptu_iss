@@ -5,13 +5,13 @@ from src.Domain.Parameters import Parameters
 
 
 mockParameters = Parameters(
-    pasta='dados/Saae',
+    pasta='dados/Saae2',
     footer= 1,
     header= 0,
     seq= ';',
     formato='xlsx',
     saida='dados/processed',
-    sufixo=['Saae'],
+    sufixo=['Saae2'],
     variaveis= [{'Ligação': ['codigoLigacao']}, {'Cliente': ['nomeCliente']}, {'Documento': ['cpf', 'cpfValido', 'cnpj', 'cnpjValido']}, {'Contato': ['telefone']}, {'Tipo do logradouro': ['tipoLogradouro']}, {'Logradouro': ['logradouro']}, {'Número': ['numero']}, {'Bairro': ['bairro']}, {'Complemento': ['complemento']}, {'CEP': ['cep']}]
 )
 
@@ -19,7 +19,7 @@ mockParameters = Parameters(
 def instanciando_leitor():
     raiz_projeto = Path(__file__).resolve().parent.parent.parent.parent.parent
 
-    caminho_txt = raiz_projeto / 'src'/'test'/ 'dados' / 'Saae' / 'parametros_Saae.txt'
+    caminho_txt = raiz_projeto / 'src'/'test'/ 'dados' / 'Saae2' / 'parametros_Saae.txt'
 
     return ParameterReader(str(caminho_txt))
 
