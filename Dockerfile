@@ -1,24 +1,26 @@
-# 1. Imagem base leve e oficial do Python
-FROM python:3.11-slim
+# 1. Imagem base estável
+FROM python:3.12-slim
 
-# 2. Define o diretório de trabalho dentro do container
+# 2. Diretório de trabalho
 WORKDIR /app
 
-# 3. Instala dependências do sistema necessárias (opcional, dependendo do seu projeto)
-# O pandas às vezes precisa de bibliotecas C extras
+# 3. Dependências do sistema (Mantemos as que adicionamos para lxml e geopandas)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libxml2-dev \
+    libxslt-dev \
+    libgdal-dev \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Copia o arquivo de dependências primeiro (aproveita o cache do Docker)
+# 4. Dependências do Python
 COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# 5. Instala as bibliotecas (pandas, pytest, cryptography para sua anonimização, etc)
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 6. Copia o restante do código do projeto
+# 5. Código
 COPY . .
 
-ENV PYTHONPATH="${PYTHONPATH}:/app"
+ENV PYTHONPATH="/app"
 
 CMD ["python", "src/pipeline/pipeline.py"]

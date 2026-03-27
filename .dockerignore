@@ -1,0 +1,6 @@
+# Ignora logs e arquivos temporários que causam erro de checksum
+aiflow/logs/
+**/__pycache__/
+*.pyc
+.git
+.env

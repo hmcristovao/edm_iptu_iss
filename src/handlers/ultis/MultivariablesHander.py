@@ -2,7 +2,6 @@ import logging
 import pandas as pd
 from src.handlers.ultis.handler import IterHander
 
-
 class MultivariablesHanderBuilder:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -14,19 +13,15 @@ class MultivariablesHanderBuilder:
         cpf_v_h = CPFValidoHandler()
         cnpj_v_h = CNPJValidoHandler()
 
-        # Montagem da Corrente
-        cpf_h.set_next(cnpj_h) \
-            .set_next(cpf_v_h) \
-            .set_next(cnpj_v_h)
-
-        # Guarda as colunas atuais para comparar depois
-        colunas_antes = set(df.columns)
+        # Montagem da Corrente (Chain of Responsibility)
+        # O set_next deve retornar o próximo handler para permitir encadeamento
+        cpf_h.set_next(cnpj_h)
+        cnpj_h.set_next(cpf_v_h)
+        cpf_v_h.set_next(cnpj_v_h)
 
         # Início do processamento
         resultado = cpf_h.handle(df, col_alvo, nome_amigavel)
 
-        # VERIFICAÇÃO: Se a coluna nome_amigavel não existe no resultado,
-        # significa que nenhum handler a processou.
         if nome_amigavel not in resultado.columns:
             self.logger.warning(
                 f"Atenção: Nenhuma regra aplicada para criar '{nome_amigavel}' a partir de '{col_alvo}'"
@@ -34,43 +29,33 @@ class MultivariablesHanderBuilder:
 
         return resultado
 
-# --- Handlers ---
+# --- Handlers de Limpeza (Apenas removem caracteres e formatam) ---
 
 class CPFHandler(IterHander):
-    def __init__(self):
-        super().__init__()
-        self.logger = logging.getLogger(self.__class__.__name__)
-
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        # Verifica se 'cpf' faz parte do nome desejado (ex: numCpf, cpf_limpo)
-        # E garante que NÃO seja o 'cpfValido' (que tem seu próprio handler)
-        if "cpf" in nome_amigavel.lower() and "valido" not in nome_amigavel.lower():
+        nome_lower = nome_amigavel.lower()
+        # Regra: Tem 'cpf', mas NÃO tem 'valido'
+        if "cpf" in nome_lower and "valido" not in nome_lower:
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len() == 11, "")
-            self.logger.info(f"Sucesso: Criada coluna {nome_amigavel} (tipo CPF) a partir de {col_alvo}")
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Limpeza CPF -> {nome_amigavel}")
             return df
         return super().handle(df, col_alvo, nome_amigavel)
-
 
 class CNPJHandler(IterHander):
-    def __init__(self):
-        super().__init__()
-        self.logger = logging.getLogger(self.__class__.__name__)
-
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        if "cnpj" in nome_amigavel.lower() and "valido" not in nome_amigavel.lower():
+        nome_lower = nome_amigavel.lower()
+        # Regra: Tem 'cnpj', mas NÃO tem 'valido'
+        if "cnpj" in nome_lower and "valido" not in nome_lower:
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len() == 14, "")
-            self.logger.info(f"Sucesso: Criada coluna CNPJ a partir de {col_alvo}")
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Limpeza CNPJ -> {nome_amigavel}")
             return df
         return super().handle(df, col_alvo, nome_amigavel)
 
+# --- Handlers de Validação (Contêm a lógica de cálculo de dígito) ---
 
 class CPFValidoHandler(IterHander):
-    def __init__(self):
-        super().__init__()
-        self.logger = logging.getLogger(self.__class__.__name__)
-
     def _validar_cpf(self, cpf: str) -> str:
         if not cpf or len(cpf) != 11 or cpf == cpf[0] * 11:
             return "N"
@@ -81,19 +66,16 @@ class CPFValidoHandler(IterHander):
         return "S"
 
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        if nome_amigavel == "cpfValido":
+        nome_lower = nome_amigavel.lower()
+        # Regra: Tem 'cpf' E tem 'valido'
+        if "cpf" in nome_lower and "valido" in nome_lower:
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.apply(self._validar_cpf)
-            self.logger.info(f"Sucesso: Criada coluna cpf valido a partir de {col_alvo}")
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Validação CPF -> {nome_amigavel}")
             return df
         return super().handle(df, col_alvo, nome_amigavel)
 
-
 class CNPJValidoHandler(IterHander):
-    def __init__(self):
-        super().__init__()
-        self.logger = logging.getLogger(self.__class__.__name__)
-
     def _validar_cnpj(self, cnpj: str) -> str:
         if not cnpj or len(cnpj) != 14 or cnpj == cnpj[0] * 14:
             return "N"
@@ -107,9 +89,11 @@ class CNPJValidoHandler(IterHander):
         return "S"
 
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
-        if nome_amigavel == "cnpjValido":
+        nome_lower = nome_amigavel.lower()
+        # Regra: Tem 'cnpj' E tem 'valido'
+        if "cnpj" in nome_lower and "valido" in nome_lower:
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.apply(self._validar_cnpj)
-            self.logger.info(f"Sucesso: Criada coluna cnpj valido a partir de {col_alvo}")
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Validação CNPJ -> {nome_amigavel}")
             return df
         return super().handle(df, col_alvo, nome_amigavel)

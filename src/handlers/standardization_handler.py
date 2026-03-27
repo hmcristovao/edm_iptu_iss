@@ -36,7 +36,7 @@ class StandardizationHandler(AbstractHandler):
                     serie_limpa = df[nome_amigavel].astype(str).str.replace(r"\D", "", regex=True)
 
                     for col_alvo in colunas_tecnicas:
-                        MultivariablesHanderBuilder().build(df, nome_amigavel,col_alvo)
+                        MultivariablesHanderBuilder().build(df, nome_amigavel,f"{col_alvo}{sufix[0]}")
 
                     # Remove a coluna original após processar as regras de documentos
                     if nome_amigavel == "CPF/CNPJ" and nome_amigavel in df.columns:

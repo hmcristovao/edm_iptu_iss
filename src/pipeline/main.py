@@ -19,7 +19,12 @@ import colorama
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 if __name__ == "__main__":
     logger = logging.getLogger()
-    load_dotenv()
+    current_dir = Path(__file__).resolve().parent
+
+    # Sobe dois níveis e entra na pasta 'dados' para achar o .env
+    dotenv_path = current_dir.parent.parent / 'dados' / '.env'
+
+    load_dotenv(dotenv_path=dotenv_path)
     colorama.init()
 
     # 1. Configuração de Cores (Dicionário padrão)
