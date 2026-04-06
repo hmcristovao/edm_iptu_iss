@@ -8,9 +8,7 @@
 *.ods
 #venv
 venv/
-dados/.env
-dados/.env
-dados/.env
+
 aiflow/logs/
 
 logs/
