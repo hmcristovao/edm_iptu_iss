@@ -10,7 +10,6 @@ class StandardizationHandler(AbstractHandler):
         super().__init__()
         self.logger = logging.getLogger(self.__class__.__name__)
     def _renomear_colunas_mapeadas(self, df, lista_mapeamento, sufix):
-        self.logger.info(f"COLUNAS - {df.columns}")
         for item in lista_mapeamento:
             for nome_amigavel, colunas_tecnicas in item.items():
 

@@ -176,6 +176,7 @@ class SAAEApp(ctk.CTk):
 
                 # Seu fluxo original
                 parameter = ParameterReader(arquivo).ler_arquivo()
+                self.logger.warning(f"Iniciando: {parameter.pasta}")
                 package = Package(parameter)
 
                 extractor = ExtractorHandler()

@@ -39,7 +39,7 @@ class ExtractorHandler(AbstractHandler):
         raiz_projeto = Path(__file__).resolve().parents[2]  # parents[2] sobe 3 níveis
         caminho_base = Path(f"{raiz_projeto}{str(parameter.pasta).replace(".", "")}").resolve()
 
-        self.logger.info(f"Buscando em: {caminho_base}")
+        self.logger.info(f"Buscando em: {parameter.pasta}")
 
         arquivos = list(caminho_base.glob(f"*.{parameter.formato}"))
         dfs = []
@@ -51,49 +51,42 @@ class ExtractorHandler(AbstractHandler):
                     engine = 'xlrd' if parameter.formato == "xls" else 'openpyxl'
                     df = pd.read_excel(arquivo, header=parameter.header, engine=engine)
                 elif parameter.formato == "xls":
-                    df = None  # Inicializa para evitar o erro de 'local variable'
                     try:
-                        import xml.etree.ElementTree as ET
-                        # Tenta o parser manual
-                        tree = ET.parse(str(arquivo))
-                        root = tree.getroot()
+                        # 1. Tentativa padrão (Binário)
+                        self.logger.info(f"Tentando extração {arquivo.name}")
+                        df = pd.read_excel(arquivo, header=parameter.header, engine='xlrd')
+                    except Exception:
+                        self.logger.info(f"Tentando extração profunda de XML em {arquivo.name}")
+                        try:
+                            # 2. Tentativa via BeautifulSoup (Lida melhor com a bagunça de tags do Excel)
+                            from bs4 import BeautifulSoup
 
-                        for el in root.iter():
-                            if '}' in el.tag:
-                                el.tag = el.tag.split('}', 1)[1]
+                            with open(arquivo, 'r', encoding='utf-8', errors='ignore') as f:
+                                soup = BeautifulSoup(f.read(), 'xml')
 
-                        rows_data = []
-                        for row in root.findall(".//Row"):
-                            cells = [cell.findtext("Data") for cell in row.findall("Cell")]
-                            if cells:
-                                rows_data.append(cells)
+                            rows_data = []
+                            # Procuramos todas as linhas da tabela
+                            for row in soup.find_all('Row'):
+                                # Para cada linha, pegamos o texto de cada célula (<Data>)
+                                cells = [cell.get_text() for cell in row.find_all('Data')]
+                                if cells:
+                                    rows_data.append(cells)
 
-                        if rows_data:
-                            df = pd.DataFrame(rows_data)
-                            header_idx = parameter.header if parameter.header is not None else 0
-                            df.columns = df.iloc[header_idx]
-                            df = df.iloc[header_idx + 1:].reset_index(drop=True)
+                            if rows_data:
+                                df = pd.DataFrame(rows_data)
+                                # Ajusta o Header conforme o parâmetro
+                                header_idx = parameter.header if parameter.header is not None else 0
+                                if len(df) > header_idx:
+                                    df.columns = df.iloc[header_idx]
+                                    df = df.iloc[header_idx + 1:].reset_index(drop=True)
+                            else:
+                                # 3. Tentativa via HTML (Caso o arquivo seja um <table> disfarçado)
+                                dfs_html = pd.read_html(str(arquivo))
+                                df = dfs_html[0]
 
-                    except Exception as e:
-                        self.logger.warning(f"Parser XML falhou em {arquivo.name}. Tentando extração via Regex...")
-
-                        # Garimpo de Texto (Precisa do 'import re' no topo!)
-                        with open(arquivo, 'r', encoding='latin-1', errors='ignore') as f:
-                            conteudo = f.read()
-
-                        padrao = r'(\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}|\d{3}\.\d{3}\.\d{3}-\d{2}|\d{14}|\d{11})'
-                        documentos = list(set(re.findall(padrao, conteudo)))
-
-                        if documentos:
-                            df = pd.DataFrame(documentos,
-                                              columns=['CPF/CNPJ'])  # Nome esperado pelo StandardizationHandler
-                            df['origem_arquivo'] = arquivo.name
-                        else:
-                            self.logger.error(f"Nenhum documento encontrado em {arquivo.name}")
-                            continue  # Pula para o próximo arquivo
-
-                    if df is None:
-                        continue
+                        except Exception as e:
+                            self.logger.error(f"Falha total ao processar {arquivo.name}: {e}")
+                            continue
                 elif parameter.formato == "csv":
                     df = pd.read_csv(arquivo, sep=parameter.sep, header=parameter.header)
 
