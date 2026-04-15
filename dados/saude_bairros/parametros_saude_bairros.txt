@@ -3,7 +3,7 @@ Output folder: ..\saida
 Sufix: SaudeBairros
 Header#: 0
 Footer#: 1
-Format: xls
+Format: xlsx
 CSV separator: 
 Variables:
 PRONTUÁRIO FAMILIAR : prontuarioFamiliar
