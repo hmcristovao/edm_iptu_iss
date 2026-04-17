@@ -121,7 +121,7 @@ class SAAEApp(ctk.CTk):
 
     def show_key_help(self):
         messagebox.showinfo("Segurança",
-                            "Use uma chave de 16+ caracteres misturando letras e símbolos.\n\nPerder esta chave torna os dados ilegíveis!")
+                            "Use uma chave com pelo menos 16 caracteres, preferencialmente combinando letras, números e símbolos.\n\n Guarde essa chave em um local seguro. Ela será indispensável para a reidentificação dos dados após a etapa de enriquecimento.")
 
     def browse_directory(self):
         path = filedialog.askdirectory()
