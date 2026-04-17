@@ -2,15 +2,11 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
 import logging
-import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key
 
-# --- Configuração de Path para o projeto SAAE ---
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.append(str(ROOT_DIR))
-
+# Importações internas do projeto
 try:
     from src.Domain.Package import Package
     from src.handlers.Pseudonymization_handler import PseudonymizationHandler
@@ -20,10 +16,12 @@ try:
     from src.handlers.standardization_handler import StandardizationHandler
     from src.usecase.leitor import ParameterReader
 except ImportError as e:
-    print(f"⚠️ Erro de Importação: {e}. Verifique a estrutura de pastas 'src'.")
+    print(f"❌ Erro de Dependência: {e}")
 
 
 class TextHandler(logging.Handler):
+    """Direciona logs do Python diretamente para o widget CTkTextbox."""
+
     def __init__(self, text_widget):
         super().__init__()
         self.text_widget = text_widget
@@ -44,191 +42,160 @@ class SAAEApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        # Configurações de Path e Ambiente
-        self.dotenv_path = ROOT_DIR / 'dados' / '.env'
+        # --- Inicialização de Paths ---
+        self.ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+        self.dotenv_path = self.ROOT_DIR / 'dados' / '.env'
         load_dotenv(dotenv_path=self.dotenv_path)
 
+        # --- Configuração de Janela ---
         self.title("SAAE - Sistema de Pseudonimização")
         self.geometry("900x750")
         ctk.set_appearance_mode("Dark")
-        self.is_password_visible = False
 
-        # --- UI LAYOUT ---
+        self.is_password_visible = False
+        self._build_ui()
+        self.setup_logging()
+
+    def _build_ui(self):
+        """Constrói a interface gráfica de forma organizada."""
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
-        # 1. Cabeçalho
-        self.header = ctk.CTkLabel(self, text="Painel de Processamento de Dados", font=("Arial", 24, "bold"))
-        self.header.grid(row=0, column=0, pady=(20, 10))
+        # Header
+        ctk.CTkLabel(self, text="Painel de Processamento SAAE", font=("Arial", 24, "bold")).grid(row=0, pady=20)
 
-        # 2. Frame de Configurações
+        # Frame de Configurações
         self.config_frame = ctk.CTkFrame(self)
         self.config_frame.grid(row=1, column=0, padx=20, pady=10, sticky="nsew")
         self.config_frame.grid_columnconfigure(1, weight=1)
 
-        # Seleção de Pasta
-        ctk.CTkLabel(self.config_frame, text="Pasta de Arquivos:", font=("Arial", 12, "bold")).grid(row=0, column=0,
-                                                                                                    padx=10, pady=10,
-                                                                                                    sticky="w")
-        self.path_entry = ctk.CTkEntry(self.config_frame, placeholder_text="Caminho dos arquivos .txt")
+        # Input: Pasta
+        ctk.CTkLabel(self.config_frame, text="Pasta de Origem:", font=("Arial", 12, "bold")).grid(row=0, column=0,
+                                                                                                  padx=10, pady=10,
+                                                                                                  sticky="w")
+        self.path_entry = ctk.CTkEntry(self.config_frame)
         self.path_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-        self.path_entry.insert(0, os.getenv("DATA_PATH", str(ROOT_DIR / 'dados')))
+        self.path_entry.insert(0, os.getenv("DATA_PATH", str(self.ROOT_DIR / 'dados')))
 
-        self.btn_browse = ctk.CTkButton(self.config_frame, text="Selecionar", width=100, command=self.browse)
-        self.btn_browse.grid(row=0, column=2, padx=10)
+        ctk.CTkButton(self.config_frame, text="Buscar", width=100, command=self.browse_directory).grid(row=0, column=2,
+                                                                                                       padx=10)
 
-        # Campo Chave (Key)
-        ctk.CTkLabel(self.config_frame, text="Chave Mestra (Key):", font=("Arial", 12, "bold")).grid(row=1, column=0,
-                                                                                                     padx=10, pady=10,
-                                                                                                     sticky="w")
+        # Input: Chave
+        ctk.CTkLabel(self.config_frame, text="Chave Mestra:", font=("Arial", 12, "bold")).grid(row=1, column=0, padx=10,
+                                                                                               pady=10, sticky="w")
 
-        self.key_container = ctk.CTkFrame(self.config_frame, fg_color="transparent")
-        self.key_container.grid(row=1, column=1, columnspan=2, padx=10, pady=10, sticky="ew")
-        self.key_container.grid_columnconfigure(0, weight=1)
+        self.key_frame = ctk.CTkFrame(self.config_frame, fg_color="transparent")
+        self.key_frame.grid(row=1, column=1, columnspan=2, padx=10, pady=10, sticky="ew")
+        self.key_frame.grid_columnconfigure(0, weight=1)
 
-        self.key_entry = ctk.CTkEntry(self.key_container, show="*", placeholder_text="Chave para criptografia")
+        self.key_entry = ctk.CTkEntry(self.key_frame, show="*")
         self.key_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.key_entry.insert(0, os.getenv("key", ""))
 
-        self.btn_view_key = ctk.CTkButton(self.key_container, text="👁️", width=40, fg_color="#444",
-                                          command=self.toggle_password)
-        self.btn_view_key.grid(row=0, column=1, padx=2)
+        ctk.CTkButton(self.key_frame, text="👁️", width=40, command=self.toggle_password_visibility).grid(row=0,
+                                                                                                         column=1,
+                                                                                                         padx=2)
+        ctk.CTkButton(self.key_frame, text="Ajuda", width=60, command=self.show_key_help).grid(row=0, column=2, padx=2)
 
-        self.btn_help_key = ctk.CTkButton(self.key_container, text="❓ Ajuda", width=80, fg_color="#1f6aa5",
-                                          command=self.mostrar_dicas_chave)
-        self.btn_help_key.grid(row=0, column=2, padx=2)
-
-        # 3. Botão de Execução Principal
-        self.run_btn = ctk.CTkButton(self, text="EXECUTAR PIPELINE", height=60, fg_color="#28a745",
-                                     hover_color="#218838", font=("Arial", 18, "bold"), command=self.start_thread)
+        # Botão de Execução
+        self.run_btn = ctk.CTkButton(self, text="INICIAR PIPELINE", height=50, fg_color="#28a745",
+                                     font=("Arial", 16, "bold"), command=self.execute_async)
         self.run_btn.grid(row=2, column=0, padx=20, pady=20, sticky="ew")
 
-        # 4. Console de Logs
-        self.log_box = ctk.CTkTextbox(self, font=("Consolas", 12), border_width=2)
+        # Console
+        self.log_box = ctk.CTkTextbox(self, font=("Consolas", 12))
         self.log_box.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="nsew")
         self.log_box.configure(state="disabled")
 
-        self.setup_logging()
-
     def setup_logging(self):
-        """Configura o logger global para que todas as classes internas enviem logs para a UI."""
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
-
-        for h in root_logger.handlers[:]:
-            root_logger.removeHandler(h)
-
         handler = TextHandler(self.log_box)
-        formatter = logging.Formatter(fmt='%(asctime)s | %(levelname)s | %(message)s', datefmt='%H:%M:%S')
-        handler.setFormatter(formatter)
+        handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', '%H:%M:%S'))
         root_logger.addHandler(handler)
         self.logger = root_logger
 
-    def toggle_password(self):
-        if self.is_password_visible:
-            self.key_entry.configure(show="*")
-            self.btn_view_key.configure(text="👁️")
-            self.is_password_visible = False
-        else:
-            self.key_entry.configure(show="")
-            self.btn_view_key.configure(text="🔒")
-            self.is_password_visible = True
+    def toggle_password_visibility(self):
+        self.is_password_visible = not self.is_password_visible
+        self.key_entry.configure(show="" if self.is_password_visible else "*")
 
-    def mostrar_dicas_chave(self):
-        dicas = (
-            "Dicas para uma Chave Segura:\n\n"
-            "• Recomendado: 12 a 16 caracteres.\n"
-            "• Use letras maiúsculas, minúsculas, números e símbolos.\n"
-            "• Exemplo: Projet0_SAAE_#2026\n\n"
-            "⚠️ IMPORTANTE: Esta chave é necessária para ler os dados futuramente. "
-            "Se você alterá-la, os novos arquivos usarão a nova chave."
-        )
-        messagebox.showinfo("Dicas de Segurança", dicas)
+    def show_key_help(self):
+        messagebox.showinfo("Segurança",
+                            "Use uma chave de 16+ caracteres misturando letras e símbolos.\n\nPerder esta chave torna os dados ilegíveis!")
 
-    def validar_chave(self, chave):
-        if not chave:
-            return False, "O campo da chave não pode estar vazio."
-        if len(chave) < 8:
-            return False, "A chave deve ter no mínimo 8 caracteres."
-        if chave.isnumeric() or chave.isalpha():
-            return False, "Chave muito fraca! Misture letras e números."
-        return True, ""
-
-    def browse(self):
+    def browse_directory(self):
         path = filedialog.askdirectory()
         if path:
             self.path_entry.delete(0, "end")
             self.path_entry.insert(0, path)
 
-    def start_thread(self):
-        self.run_btn.configure(state="disabled", text="PROCESSANDO...")
-        threading.Thread(target=self.run_pipeline, daemon=True).start()
+    def validate_inputs(self):
+        key = self.key_entry.get().strip()
+        path = Path(self.path_entry.get())
+        if not key or len(key) < 8:
+            return False, "Chave inválida (mínimo 8 caracteres)."
+        if not path.exists():
+            return False, "O caminho selecionado não existe."
+        return True, (path, key)
 
-    def run_pipeline(self):
-        data_path = Path(self.path_entry.get())
-        key_value = self.key_entry.get().strip()
-
-        # 1. Validação de Segurança
-        ok, msg = self.validar_chave(key_value)
-        if not ok:
-            self.logger.error(f"Erro: {msg}")
-            messagebox.showwarning("Atenção", msg)
-            self.run_btn.after(0, lambda: self.run_btn.configure(state="normal", text="EXECUTAR PIPELINE"))
+    def execute_async(self):
+        valid, result = self.validate_inputs()
+        if not valid:
+            messagebox.showwarning("Erro", result)
             return
 
-        # 2. Configuração de Ambiente
-        os.environ['key'] = key_value
-        if not self.dotenv_path.parent.exists(): self.dotenv_path.parent.mkdir(parents=True)
-        set_key(str(self.dotenv_path), "key", key_value)
-        set_key(str(self.dotenv_path), "DATA_PATH", str(data_path))
+        self.run_btn.configure(state="disabled", text="PROCESSANDO...")
+        threading.Thread(target=self.run_pipeline, args=result, daemon=True).start()
 
-        self.logger.info("Configuração salva. Iniciando varredura de arquivos...")
-
+    def run_pipeline(self, data_path, key_value):
         try:
-            arquivos = list(data_path.rglob("*.txt"))
+            # 1. Persistência de Configuração
+            os.environ['key'] = key_value
+            if not self.dotenv_path.parent.exists(): self.dotenv_path.parent.mkdir(parents=True)
+            set_key(str(self.dotenv_path), "key", key_value)
+            set_key(str(self.dotenv_path), "DATA_PATH", str(data_path))
 
-            # 3. Verificação de Arquivos Alvo (Correção do falso positivo)
+            # 2. Preparação da Cadeia (Design Pattern: Chain of Responsibility)
+            # Criamos a estrutura UMA única vez para ganhar performance
+            extractor = ExtractorHandler()
+            standardizer = StandardizationHandler()
+            anon_adapter = AnonimizadorReversivel()
+            pseudo = PseudonymizationHandler(anon_adapter)
+            exporter = ExportHandler()
+
+            extractor.set_next(standardizer)
+            standardizer.set_next(pseudo)
+            pseudo.set_next(exporter)
+
+            arquivos = list(data_path.rglob("*.txt"))
             if not arquivos:
-                self.logger.warning(f"Nenhum arquivo encontrado em: {data_path}")
-                messagebox.showwarning("Pasta Vazia", f"Não foram encontrados arquivos .txt na pasta selecionada.")
-                self.run_btn.after(0, lambda: self.run_btn.configure(state="normal", text="EXECUTAR PIPELINE"))
+                self.logger.warning("Nenhum arquivo .txt encontrado.")
                 return
 
-            sucessos = 0
+            self.logger.info(f"Iniciando lote: {len(arquivos)} arquivos encontrados.")
+
+            # 3. Processamento
+            success_count = 0
             for arquivo in arquivos:
-                self.logger.info("-" * 40)
-                self.logger.info(f"Processando: {arquivo.name}")
+                try:
+                    self.logger.info(f"Lendo: {arquivo.name}")
+                    param = ParameterReader(arquivo).ler_arquivo()
+                    package = Package(param)
 
-                parameter = ParameterReader(arquivo).ler_arquivo()
-                package = Package(parameter)
+                    # Dispara a cadeia de handlers
+                    extractor.handle(request=package)
+                    success_count += 1
+                except Exception as file_error:
+                    self.logger.error(f"Erro no arquivo {arquivo.name}: {file_error}")
 
-                extractor = ExtractorHandler()
-                standardizer = StandardizationHandler()
-                anon_adapter = AnonimizadorReversivel()
-                pseudo = PseudonymizationHandler(anon_adapter)
-                exporter = ExportHandler()
-
-                extractor.set_next(standardizer)
-                standardizer.set_next(pseudo)
-                pseudo.set_next(exporter)
-
-                extractor.handle(request=package)
-                sucessos += 1
-                self.logger.info(f"Arquivo concluído: {arquivo.name}")
-
-            # 4. Feedback Final
-            if sucessos > 0:
-                self.logger.info("=" * 40)
-                self.logger.info(f"Pipeline finalizado. Total: {sucessos} arquivos.")
-                messagebox.showinfo("Sucesso",
-                                    f"Processamento concluído com sucesso!\n{sucessos} arquivos processados.")
+            self.logger.info(f"CONCLUÍDO. Sucessos: {success_count}/{len(arquivos)}")
+            messagebox.showinfo("Fim do Processo", f"Processados {success_count} arquivos com sucesso.")
 
         except Exception as e:
-            self.logger.error(f"ERRO NO PROCESSO: {str(e)}")
-            messagebox.showerror("Erro Crítico", f"Ocorreu uma falha inesperada:\n{str(e)}")
-
+            self.logger.error(f"Erro Crítico: {e}")
+            messagebox.showerror("Erro Crítico", str(e))
         finally:
-            self.run_btn.after(0, lambda: self.run_btn.configure(state="normal", text="EXECUTAR PIPELINE"))
+            self.run_btn.after(0, lambda: self.run_btn.configure(state="normal", text="INICIAR PIPELINE"))
 
 
 if __name__ == "__main__":
