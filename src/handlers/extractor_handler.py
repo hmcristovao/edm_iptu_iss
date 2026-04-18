@@ -18,7 +18,11 @@ class ExtractorHandler(AbstractHandler):
         super().__init__()
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def __r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(self, df: pd.DataFrame, footer) -> pd.DataFrame:
+    def __remover_rodape_por_quantidade(
+        self,
+        df: pd.DataFrame,
+        footer,
+    ) -> pd.DataFrame:
         if not footer:
             return df
 
@@ -32,8 +36,51 @@ class ExtractorHandler(AbstractHandler):
 
         return df.iloc[:-footer]
 
+    def __listar_arquivos(self, caminho_base: Path, formato: str) -> list[Path]:
+        formato = formato.lower().strip().lstrip(".")
+
+        if formato == "xls":
+            return sorted(caminho_base.glob("*.xls"))
+
+        if formato == "xlsx":
+            return sorted(caminho_base.glob("*.xlsx"))
+
+        if formato == "csv":
+            return sorted(caminho_base.glob("*.csv"))
+
+        return []
+
+    def __ler_arquivo(self, arquivo: Path, parameter: Parameters) -> pd.DataFrame:
+        extensao_real = arquivo.suffix.lower().lstrip(".")
+
+        if extensao_real == "xlsx":
+            return pd.read_excel(
+                arquivo,
+                header=parameter.header,
+                engine="openpyxl",
+            )
+
+        if extensao_real == "xls":
+            return pd.read_excel(
+                arquivo,
+                header=parameter.header,
+                engine="xlrd",
+            )
+
+        if extensao_real == "csv":
+            return pd.read_csv(
+                arquivo,
+                sep=parameter.sep,
+                header=parameter.header,
+                encoding="utf-8",
+                on_bad_lines="skip",
+            )
+
+        raise ValueError(f"Formato não suportado: {arquivo.suffix}")
+
     def _carregarUnirArquivos(self, parameter: Parameters) -> pd.DataFrame:
         caminho_base = Path(parameter.pasta).resolve()
+        formato = parameter.formato.lower().strip().lstrip(".")
 
         self.logger.info(f"Buscando em: {parameter.pasta}")
         self.logger.info(f"Caminho resolvido: {caminho_base}")
@@ -42,13 +89,9 @@ class ExtractorHandler(AbstractHandler):
             self.logger.error(f"ERRO: O caminho {caminho_base} não existe.")
             return pd.DataFrame()
 
-        ext = parameter.formato.lower()
+        arquivos = self.__listar_arquivos(caminho_base, formato)
 
-        arquivos = list(caminho_base.glob(f"*.{ext}"))
-
-        if not arquivos and ext in ("xls", "xlsx"):
-            arquivos = list(caminho_base.glob("*.[xX][lL][sS]*"))
-
+        self.logger.info(f"Formato declarado no parâmetro: {formato}")
         self.logger.info(f"Quantidade de arquivos encontrados: {len(arquivos)}")
 
         dfs = []
@@ -57,36 +100,15 @@ class ExtractorHandler(AbstractHandler):
             try:
                 self.logger.info(f"Tentando extração: {arquivo.name}")
 
-                if ext == "xlsx":
-                    df = pd.read_excel(
-                        arquivo,
-                        header=parameter.header,
-                        engine="openpyxl",
-                    )
-
-                elif ext == "xls":
-                    df = pd.read_excel(
-                        arquivo,
-                        header=parameter.header,
-                        engine="xlrd",
-                    )
-
-                elif ext == "csv":
-                    df = pd.read_csv(
-                        arquivo,
-                        sep=parameter.sep,
-                        header=parameter.header,
-                        encoding="utf-8",
-                        on_bad_lines="skip",
-                    )
-
-                else:
-                    self.logger.error(f"Formato não suportado para leitura: {ext}")
-                    continue
+                df = self.__ler_arquivo(arquivo, parameter)
 
                 if not df.empty:
-                    df = self.__r9yMnTm4NSzvG9rrwjM2ec8xZgh1cafXH8(df, parameter.footer)
+                    df = self.__remover_rodape_por_quantidade(
+                        df,
+                        parameter.footer,
+                    )
                     dfs.append(df)
+
                     self.logger.info(
                         f"Sucesso: {arquivo.name} carregado com {len(df)} linhas."
                     )
@@ -101,7 +123,7 @@ class ExtractorHandler(AbstractHandler):
         if not dfs:
             return pd.DataFrame()
 
-        return pd.concat([d for d in dfs if not d.empty], ignore_index=True)
+        return pd.concat(dfs, ignore_index=True)
 
     def handle(self, request: Package) -> Package:
         if request.parameters.formato is None:
@@ -111,12 +133,14 @@ class ExtractorHandler(AbstractHandler):
 
         if request.parameters.pasta is None:
             raise NotFoundPathError(
-                "Não encontrado pasta para processamento"
+                "Não encontrada pasta para processamento"
             )
 
-        if request.parameters.formato not in ["csv", "xlsx", "xls"]:
+        formato = request.parameters.formato.lower().strip().lstrip(".")
+
+        if formato not in ["csv", "xlsx", "xls"]:
             raise UnknownExtensioError(
-                "Formato da extensão não tratada"
+                "Formato da extensão não tratado"
             )
 
         df = self._carregarUnirArquivos(request.parameters)
