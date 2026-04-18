@@ -1,21 +1,18 @@
+from pathlib import Path
 import os
 from dotenv import load_dotenv
 from src.Domain.Parameters import Parameters
 
-# Carrega as variáveis do arquivo .env
 load_dotenv()
 
 
 class ParameterReader:
     def __init__(self, caminho_arquivo):
-        self.caminho = caminho_arquivo
-        # DATA_PATH será a nossa raiz absoluta
-        self.base_path = os.getenv('DATA_PATH', os.getcwd())
+        self.caminho = Path(caminho_arquivo).resolve()
+        self.base_path = Path(os.getenv('DATA_PATH', os.getcwd())).resolve()
 
     def ler_arquivo(self) -> Parameters:
-        # Valores padrão
         config = {
-            'Subpasta': '',  # Virá do 'Input folder' do TXT
             'CSV separator': None,
             'Format': '',
             'Header#': 0,
@@ -31,14 +28,12 @@ class ParameterReader:
 
         for linha in linhas:
             linha_limpa = linha.strip()
-            if not linha_limpa: continue
+            if not linha_limpa:
+                continue
+
             linha_lower = linha_limpa.lower()
 
-            # Aqui pegamos apenas o NOME da subpasta (ex: 'economico')
-            if linha_lower.startswith('input folder:'):
-                config['Subpasta'] = linha_limpa.split(':', 1)[1].strip()
-
-            elif linha_lower.startswith('footer#:'):
+            if linha_lower.startswith('footer#:'):
                 config['Footer#'] = int(linha_limpa.split(':', 1)[1].strip())
 
             elif linha_lower.startswith('header#:'):
@@ -64,17 +59,15 @@ class ParameterReader:
                 campos = [c.strip() for c in partes[1].split(',')]
                 config['Variables'].append({chave: campos})
 
-        # --- Lógica de Montagem dos Caminhos via ENV ---
+        # A pasta de entrada passa a ser a pasta onde o TXT está
+        caminho_entrada = self.caminho.parent
 
-        # Entrada: DATA_PATH + subpasta lida no TXT
-        caminho_entrada = os.path.join(self.base_path, config['Subpasta'])
-
-        # Saída: DATA_PATH + pasta fixa 'data_processed'
-        caminho_saida = os.path.join(self.base_path, 'data_processed')
+        # Saída continua centralizada na raiz informada na interface
+        caminho_saida = self.base_path.parent / 'dados_processados'
 
         return Parameters(
-            pasta=caminho_entrada,
-            saida=caminho_saida,
+            pasta=str(caminho_entrada),
+            saida=str(caminho_saida),
             footer=config['Footer#'],
             header=config['Header#'],
             sep=config['CSV separator'],

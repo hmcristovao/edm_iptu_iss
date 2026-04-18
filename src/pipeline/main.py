@@ -167,7 +167,7 @@ class SAAEApp(ctk.CTk):
             standardizer.set_next(pseudo)
             pseudo.set_next(exporter)
 
-            arquivos = list(data_path.rglob("*.txt"))
+            arquivos = list(data_path.rglob("parametros_*.txt"))
             if not arquivos:
                 self.logger.warning("Nenhum arquivo .txt encontrado.")
                 return

@@ -13,7 +13,7 @@ class ExportHandler(AbstractHandler):
         sufixo = request.parameters.sufixo[0]
 
         # O caminho vindo do parâmetro já deve apontar para onde queres salvar.
-        # Garantimos que o objeto Path aponte para a pasta 'data_processed'
+        # Garantimos que o objeto Path aponte para a pasta 'dados_processados'
         # conforme a tua instrução de que este é o destino final.
         pasta_saida = pathlib.Path(request.parameters.saida)
 
@@ -34,11 +34,11 @@ class ExportHandler(AbstractHandler):
                 # Gravação do CSV
                 # Nota: Usei encoding utf-8-sig para evitar problemas com acentos em sistemas Windows/Excel
                 request.datas.to_csv(out_csv, index=False, sep=';', encoding='utf-8-sig')
-                self.logger.info(f"Arquivo gerado com sucesso: {out_csv.name}")
+                self.logger.info(f"Arquivo gerado com sucesso: {out_csv}")
             else:
                 self.logger.warning(f"O DataFrame '{sufixo}' está vazio. Nada foi exportado.")
         except Exception as e:
-            self.logger.error(f"Falha ao gravar o ficheiro {out_csv}: {e}")
+            self.logger.error(f"Falha ao gravar o arquivo {out_csv}: {e}")
             raise
 
         return super().handle(request)
