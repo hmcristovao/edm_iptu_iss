@@ -75,7 +75,7 @@ class SAAEApp(ctk.CTk):
                                                                                                   sticky="w")
         self.path_entry = ctk.CTkEntry(self.config_frame)
         self.path_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
-        self.path_entry.insert(0, os.getenv("DATA_PATH", str(self.ROOT_DIR / 'dados')))
+        self.path_entry.insert(0, os.getenv("DATA_PATH", ""))
 
         ctk.CTkButton(self.config_frame, text="Buscar", width=100, command=self.browse_directory).grid(row=0, column=2,
                                                                                                        padx=10)
@@ -149,11 +149,23 @@ class SAAEApp(ctk.CTk):
 
     def run_pipeline(self, data_path, key_value):
         try:
-            # 1. Persistência de Configuração
-            os.environ['key'] = key_value
-            if not self.dotenv_path.parent.exists(): self.dotenv_path.parent.mkdir(parents=True)
-            set_key(str(self.dotenv_path), "key", key_value)
-            set_key(str(self.dotenv_path), "DATA_PATH", str(data_path))
+            # 1. Persistência de configuração
+            os.environ["key"] = key_value
+            os.environ["DATA_PATH"] = str(data_path)
+
+            # .env interno da aplicação: <raiz_do_projeto>/config/.env
+            app_dotenv_path = self.ROOT_DIR / "config" / ".env"
+            app_dotenv_path.parent.mkdir(parents=True, exist_ok=True)
+
+            set_key(str(app_dotenv_path), "key", key_value)
+            set_key(str(app_dotenv_path), "DATA_PATH", str(data_path))
+
+            # .env na área do usuário: pasta irmã de "dados"/config/.env
+            user_dotenv_path = data_path.parent / "config" / ".env"
+            user_dotenv_path.parent.mkdir(parents=True, exist_ok=True)
+
+            set_key(str(user_dotenv_path), "key", key_value)
+            set_key(str(user_dotenv_path), "DATA_PATH", str(data_path))
 
             # 2. Preparação da Cadeia (Design Pattern: Chain of Responsibility)
             # Criamos a estrutura UMA única vez para ganhar performance
