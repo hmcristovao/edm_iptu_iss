@@ -44,7 +44,7 @@ class SAAEApp(ctk.CTk):
 
         # --- Inicialização de Paths ---
         self.ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-        self.dotenv_path = self.ROOT_DIR / 'dados' / '.env'
+        self.dotenv_path = self.ROOT_DIR / 'config' / '.env'
         load_dotenv(dotenv_path=self.dotenv_path)
 
         # --- Configuração de Janela ---
