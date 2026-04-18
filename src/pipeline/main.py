@@ -196,12 +196,22 @@ class SAAEApp(ctk.CTk):
 
                     # Dispara a cadeia de handlers
                     extractor.handle(request=package)
-                    success_count += 1
+
+                    if getattr(package, "exported", False):
+                        success_count += 1
+                    else:
+                        self.logger.warning(f"Arquivo de parâmetro processado sem exportação: {arquivo.name}")
                 except Exception as file_error:
                     self.logger.error(f"Erro no arquivo {arquivo.name}: {file_error}")
 
-            self.logger.info(f"CONCLUÍDO. Sucessos: {success_count}/{len(arquivos)}")
-            messagebox.showinfo("Fim do Processo", f"Processados {success_count} arquivos com sucesso.")
+            self.logger.info(
+                f"CONCLUÍDO. Exportações realizadas: {success_count}/{len(arquivos)} arquivos de parâmetro."
+            )
+
+            messagebox.showinfo(
+                "Fim do Processo",
+                f"Exportações realizadas: {success_count}/{len(arquivos)} arquivos de parâmetro."
+            )
 
         except Exception as e:
             self.logger.error(f"Erro Crítico: {e}")
