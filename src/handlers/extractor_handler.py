@@ -82,43 +82,47 @@ class ExtractorHandler(AbstractHandler):
         caminho_base = Path(parameter.pasta).resolve()
         formato = parameter.formato.lower().strip().lstrip(".")
 
-        self.logger.info(f"Buscando em: {parameter.pasta}")
-        self.logger.info(f"Caminho resolvido: {caminho_base}")
-
         if not caminho_base.exists():
             self.logger.error(f"ERRO: O caminho {caminho_base} não existe.")
             return pd.DataFrame()
 
         arquivos = self.__listar_arquivos(caminho_base, formato)
 
-        self.logger.info(f"Formato declarado no parâmetro: {formato}")
-        self.logger.info(f"Quantidade de arquivos encontrados: {len(arquivos)}")
+        # Variáveis de controle de contagem
+        total_arquivos = len(arquivos)
+        arquivos_sucesso = 0
+        total_linhas_consolidado = 0
+
+        self.logger.info(f"Iniciando processamento. Total de arquivos encontrados: {total_arquivos}")
 
         dfs = []
 
         for arquivo in arquivos:
             try:
-                self.logger.info(f"Tentando extração: {arquivo.name}")
-
                 df = self.__ler_arquivo(arquivo, parameter)
 
                 if not df.empty:
-                    df = self.__remover_rodape_por_quantidade(
-                        df,
-                        parameter.footer,
-                    )
-                    dfs.append(df)
+                    df = self.__remover_rodape_por_quantidade(df, parameter.footer)
 
-                    self.logger.info(
-                        f"Sucesso: {arquivo.name} carregado com {len(df)} linhas."
-                    )
+                    if not df.empty:
+                        dfs.append(df)
+                        arquivos_sucesso += 1
+                        total_linhas_consolidado += len(df)
+                        self.logger.info(f"Sucesso: {arquivo.name} ({len(df)} linhas).")
+                    else:
+                        self.logger.warning(f"Aviso: {arquivo.name} ficou vazio após remover rodapé.")
                 else:
-                    self.logger.warning(
-                        f"Aviso: o arquivo {arquivo.name} resultou em um DataFrame vazio."
-                    )
+                    self.logger.warning(f"Aviso: {arquivo.name} está vazio.")
 
             except Exception as e:
-                self.logger.error(f"Erro crítico ao ler {arquivo.name}: {e}")
+                self.logger.error(f"Erro crítico ao processar {arquivo.name}: {e}")
+
+        # Relatório final de contagem
+        self.logger.info("--- Relatório de Processamento ---")
+        self.logger.info(f"Arquivos totais encontrados: {total_arquivos}")
+        self.logger.info(f"Arquivos processados com sucesso: {arquivos_sucesso}")
+        self.logger.info(f"Total final de linhas consolidadas: {total_linhas_consolidado}")
+        self.logger.info("----------------------------------")
 
         if not dfs:
             return pd.DataFrame()

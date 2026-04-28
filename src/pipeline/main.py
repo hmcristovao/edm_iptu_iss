@@ -1,3 +1,5 @@
+import pathlib
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
@@ -49,7 +51,7 @@ class SAAEApp(ctk.CTk):
 
         # --- Configuração de Janela ---
         self.title("SAAE - Sistema de Pseudonimização")
-        self.geometry("900x750")
+        self.geometry("900x800")
         ctk.set_appearance_mode("Dark")
 
         self.is_password_visible = False
@@ -57,9 +59,9 @@ class SAAEApp(ctk.CTk):
         self.setup_logging()
 
     def _build_ui(self):
-        """Constrói a interface gráfica de forma organizada."""
+        """Constrói a interface gráfica completa."""
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)  # Ajustado para acomodar barra de progresso
 
         # Header
         ctk.CTkLabel(self, text="Painel de Processamento SAAE", font=("Arial", 24, "bold")).grid(row=0, pady=20)
@@ -76,14 +78,12 @@ class SAAEApp(ctk.CTk):
         self.path_entry = ctk.CTkEntry(self.config_frame)
         self.path_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
         self.path_entry.insert(0, os.getenv("DATA_PATH", ""))
-
         ctk.CTkButton(self.config_frame, text="Buscar", width=100, command=self.browse_directory).grid(row=0, column=2,
                                                                                                        padx=10)
 
         # Input: Chave
         ctk.CTkLabel(self.config_frame, text="Chave Mestra:", font=("Arial", 12, "bold")).grid(row=1, column=0, padx=10,
                                                                                                pady=10, sticky="w")
-
         self.key_frame = ctk.CTkFrame(self.config_frame, fg_color="transparent")
         self.key_frame.grid(row=1, column=1, columnspan=2, padx=10, pady=10, sticky="ew")
         self.key_frame.grid_columnconfigure(0, weight=1)
@@ -91,20 +91,24 @@ class SAAEApp(ctk.CTk):
         self.key_entry = ctk.CTkEntry(self.key_frame, show="*")
         self.key_entry.grid(row=0, column=0, sticky="ew", padx=(0, 5))
         self.key_entry.insert(0, os.getenv("key", ""))
-
         ctk.CTkButton(self.key_frame, text="👁️", width=40, command=self.toggle_password_visibility).grid(row=0,
                                                                                                          column=1,
                                                                                                          padx=2)
         ctk.CTkButton(self.key_frame, text="Ajuda", width=60, command=self.show_key_help).grid(row=0, column=2, padx=2)
 
+        # Barra de Progresso
+        self.progress_bar = ctk.CTkProgressBar(self)
+        self.progress_bar.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="ew")
+        self.progress_bar.set(0)
+
         # Botão de Execução
         self.run_btn = ctk.CTkButton(self, text="INICIAR PIPELINE", height=50, fg_color="#28a745",
                                      font=("Arial", 16, "bold"), command=self.execute_async)
-        self.run_btn.grid(row=2, column=0, padx=20, pady=20, sticky="ew")
+        self.run_btn.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
 
         # Console
         self.log_box = ctk.CTkTextbox(self, font=("Consolas", 12))
-        self.log_box.grid(row=3, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.log_box.grid(row=4, column=0, padx=20, pady=(0, 20), sticky="nsew")
         self.log_box.configure(state="disabled")
 
     def setup_logging(self):
@@ -120,8 +124,7 @@ class SAAEApp(ctk.CTk):
         self.key_entry.configure(show="" if self.is_password_visible else "*")
 
     def show_key_help(self):
-        messagebox.showinfo("Segurança",
-                            "Use uma chave com pelo menos 16 caracteres, preferencialmente combinando letras, números e símbolos.\n\n Guarde essa chave em um local seguro. Ela será indispensável para a reidentificação dos dados após a etapa de enriquecimento.")
+        messagebox.showinfo("Segurança", "Use uma chave com pelo menos 16 caracteres. Guarde em local seguro.")
 
     def browse_directory(self):
         path = filedialog.askdirectory()
@@ -145,30 +148,21 @@ class SAAEApp(ctk.CTk):
             return
 
         self.run_btn.configure(state="disabled", text="PROCESSANDO...")
+        self.progress_bar.set(0)
         threading.Thread(target=self.run_pipeline, args=result, daemon=True).start()
 
     def run_pipeline(self, data_path, key_value):
         try:
-            # 1. Persistência de configuração
+            # 1. Persistência
             os.environ["key"] = key_value
             os.environ["DATA_PATH"] = str(data_path)
 
-            # .env interno da aplicação: <raiz_do_projeto>/config/.env
             app_dotenv_path = self.ROOT_DIR / "config" / ".env"
             app_dotenv_path.parent.mkdir(parents=True, exist_ok=True)
-
             set_key(str(app_dotenv_path), "key", key_value)
             set_key(str(app_dotenv_path), "DATA_PATH", str(data_path))
 
-            # .env na área do usuário: pasta irmã de "dados"/config/.env
-            user_dotenv_path = data_path.parent / "config" / ".env"
-            user_dotenv_path.parent.mkdir(parents=True, exist_ok=True)
-
-            set_key(str(user_dotenv_path), "key", key_value)
-            set_key(str(user_dotenv_path), "DATA_PATH", str(data_path))
-
-            # 2. Preparação da Cadeia (Design Pattern: Chain of Responsibility)
-            # Criamos a estrutura UMA única vez para ganhar performance
+            # 2. Setup do Pipeline
             extractor = ExtractorHandler()
             standardizer = StandardizationHandler()
             anon_adapter = AnonimizadorReversivel()
@@ -180,38 +174,48 @@ class SAAEApp(ctk.CTk):
             pseudo.set_next(exporter)
 
             arquivos = list(data_path.rglob("parametros_*.txt"))
-            if not arquivos:
+            total_arquivos = len(arquivos)
+
+            if total_arquivos == 0:
                 self.logger.warning("Nenhum arquivo .txt encontrado.")
                 return
 
-            self.logger.info(f"Iniciando lote: {len(arquivos)} arquivos encontrados.")
+            self.logger.info(f"Iniciando lote: {total_arquivos} arquivos encontrados.")
 
-            # 3. Processamento
             success_count = 0
-            for arquivo in arquivos:
+            error_count = 0
+            pastas_processadas = set()
+            # 3. Processamento
+            for i, arquivo in enumerate(arquivos):
                 try:
-                    self.logger.info(f"Lendo: {arquivo.name}")
+                    self.logger.info(f"[{i + 1}/{total_arquivos}] Processando: {arquivo.name}")
                     param = ParameterReader(arquivo).ler_arquivo()
                     package = Package(param)
 
-                    # Dispara a cadeia de handlers
                     extractor.handle(request=package)
 
-                    if getattr(package, "exported", False):
-                        success_count += 1
-                    else:
-                        self.logger.warning(f"Arquivo de parâmetro processado sem exportação: {arquivo.name}")
+
                 except Exception as file_error:
                     self.logger.error(f"Erro no arquivo {arquivo.name}: {file_error}")
 
-            self.logger.info(
-                f"CONCLUÍDO. Exportações realizadas: {success_count}/{len(arquivos)} arquivos de parâmetro."
+                # Atualização visual da barra
+                progress = (i + 1) / total_arquivos
+                self.after(0, lambda p=progress: self.progress_bar.set(p))
+            pasta_saida = pathlib.Path(package.parameters.saida)
+
+            # Conta quantas subpastas existem dentro do caminho informado
+            quantidade_csv = sum(1 for item in pasta_saida.rglob("*.csv") if item.is_file())
+            relatorio_pastas = "\n".join([f"📁 {p}" for p in sorted(pastas_processadas)])
+            resumo = (
+                f"PROCESSAMENTO CONCLUÍDO.\n\n"
+                f"📁 Quantidade de pastas processadas: {total_arquivos}\n\n"
+                f"📄 Quantidade de arquivos CSV gerados: {quantidade_csv}\n\n"
+                f"⚠️ Quantidade de pastas não processadas: {total_arquivos - quantidade_csv}\n"
+                f"🔎 Consulte os logs para mais detalhes.\n\n"
             )
 
-            messagebox.showinfo(
-                "Fim do Processo",
-                f"Exportações realizadas: {success_count}/{len(arquivos)} arquivos de parâmetro."
-            )
+            self.logger.info(resumo)
+            messagebox.showinfo("Fim do Processo", resumo)
 
         except Exception as e:
             self.logger.error(f"Erro Crítico: {e}")
