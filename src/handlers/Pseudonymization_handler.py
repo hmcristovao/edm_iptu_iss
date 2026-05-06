@@ -34,11 +34,17 @@ class PseudonymizationHandler(AbstractHandler):
 
     def handle(self, request: Package) -> Package:
         df = request.datas
+
+        # Remove colunas "Unnamed"
+        unnamed = [col for col in df.columns if "Unnamed:" in str(col).lower()]
+
+        if unnamed:
+            self.logger.warning(f"possivel mal formatacao na especificacao do head: {unnamed}")
+
         sufixo = request.parameters.sufixo[0]
         self.logger.info(f'--- Iniciando Pseudonimização dinâmica - {sufixo} ---')
 
-        # 1. Identifica colunas que REALMENTE contêm dados (CPF/CNPJ)
-        # Filtramos para ignorar colunas que já são de validação (ex: cpfValido)
+        # 1. Identifica colunas que realmente contêm CPF/CNPJ
         colunas_documento = [
             col for col in df.columns
             if col is not None
@@ -50,25 +56,29 @@ class PseudonymizationHandler(AbstractHandler):
             col_lower = str(col).lower()
             tipo = "cpf" if "cpf" in col_lower else "cnpj"
 
-            # 2. Busca refinada pela coluna de validação correspondente
+            # 2. Busca coluna de validação correspondente
             col_valida = None
+
             for c in df.columns:
                 c_nome = str(c).lower()
 
-                # Regras para ser a coluna de validação correta:
-                # - Deve ser uma coluna diferente da de dado (c != col)
-                # - Deve conter o tipo (cpf ou cnpj)
-                # - Deve conter o termo 'valido' ou 'validacao'
-                if c != col and tipo in c_nome and ('valid' in c_nome):
+                if (
+                        c != col
+                        and tipo in c_nome
+                        and 'valid' in c_nome
+                ):
                     col_valida = c
                     break
 
-            # 3. Executa se o par foi encontrado corretamente
+            # 3. Executa anonimização
             if col_valida:
+                self.logger.info(
+                    f"Anonimizando colunas: {col} / {col_valida}"
+                )
                 df = self.anonimizar(df, col, col_valida)
             else:
                 self.logger.warning(
-                    f"Coluna '{col}' ignorada: Nenhuma coluna de validação específica encontrada para {tipo}."
+                    f"Coluna '{col}' ignorada: validação não encontrada."
                 )
 
         request.datas = df
