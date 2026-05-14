@@ -1,4 +1,6 @@
 import logging
+import re
+
 import pandas as pd
 from src.handlers.ultis.handler import IterHander
 
@@ -34,7 +36,6 @@ class MultivariablesHanderBuilder:
 class CPFHandler(IterHander):
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
         nome_lower = nome_amigavel.lower()
-        # Regra: Tem 'cpf', mas NÃO tem 'valido'
         if "cpf" in nome_lower and "valido" not in nome_lower:
             serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
             df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len() == 11, "")
@@ -75,17 +76,33 @@ class CPFValidoHandler(IterHander):
             return df
         return super().handle(df, col_alvo, nome_amigavel)
 
+
 class CNPJValidoHandler(IterHander):
     def _validar_cnpj(self, cnpj: str) -> str:
-        if not cnpj or len(cnpj) != 14 or cnpj == cnpj[0] * 14:
+        # 1. Clean the string (remove dots, dashes, slashes)
+        cnpj = re.sub(r'\D', '', str(cnpj))
+
+        # 2. Basic checks: length and known invalid patterns
+        if len(cnpj) != 14 or cnpj == cnpj[0] * 14:
             return "N"
-        pesos = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
-        for i in range(12, 14):
-            soma = sum(int(cnpj[num]) * (pesos[num - (i - 12)]) for num in range(i))
-            digito = (soma % 11)
-            digito = 0 if digito < 2 else 11 - digito
-            if digito != int(cnpj[i]): return "N"
-            pesos.insert(0, 6)
+
+        def calcular_digito(fatia, pesos):
+            soma = sum(int(digit) * weight for digit, weight in zip(fatia, pesos))
+            resto = soma % 11
+            return 0 if resto < 2 else 11 - resto
+
+        # Weights for the 1st and 2nd digits
+        pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+
+        # Validate first digit
+        if calcular_digito(cnpj[:12], pesos1) != int(cnpj[12]):
+            return "N"
+
+        # Validate second digit
+        if calcular_digito(cnpj[:13], pesos2) != int(cnpj[13]):
+            return "N"
+
         return "S"
 
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
