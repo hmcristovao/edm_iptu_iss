@@ -39,7 +39,8 @@ class StandardizationHandler(AbstractHandler):
                         MultivariablesHanderBuilder().build(df, nome_amigavel,f"{col_alvo}{sufix[0]}")
 
                     # Remove a coluna original após processar as regras de documentos
-                    if nome_amigavel == "CPF/CNPJ" and nome_amigavel in df.columns:
+                    if ("CPF" in str.upper(nome_amigavel) )or ("CNPJ" in str.upper(nome_amigavel)):
+                        self.logger.warning(f"DELETADO: '{nome_amigavel}' do dataset")
                         df.drop(columns=[nome_amigavel], inplace=True)
 
                 else:
