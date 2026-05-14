@@ -43,86 +43,117 @@ class ExtractorHandler(AbstractHandler):
             self.logger.error(f"ERRO: O caminho {caminho_base} não existe!")
             return pd.DataFrame()
 
-        arquivos = list(caminho_base.glob(f"*.{parameter.formato}"))
-        if not arquivos:
-            arquivos = list(caminho_base.glob(f"*.[xX][lL][sS]*"))
+        # Melhorando a busca de arquivos para ser case-insensitive
+        arquivos = list(caminho_base.glob(f"*.[xX][lL][sS]*")) if parameter.formato.lower() in ['xls',
+                                                                                                'xlsx'] else list(
+            caminho_base.glob(f"*.{parameter.formato}"))
 
         dfs = []
         self.logger.info(f"Quantidade de arquivos encontrados: {len(arquivos)}")
 
         for arquivo in arquivos:
+            # 1. IGNORAR ARQUIVOS TEMPORÁRIOS E DE TRAVAMENTO DO EXCEL
+            #if arquivo.name.startswith("~") or arquivo.name.startswith(".~"):
+            #    self.logger.warning(f"Ignorando arquivo temporário: {arquivo.name}")
+            #    continue
+
             df = None
             try:
                 self.logger.info(f"Tentando extração: {arquivo.name}")
-                ext = parameter.formato.lower()
 
-                # 1. TRATAMENTO PARA XLSX
+                # CORREÇÃO: Captura a extensão real do arquivo atual ignorando o parâmetro genérico
+                ext = arquivo.suffix.lower().strip('.')
+
+                # Mantém a compatibilidade forçada se for csv
+                if parameter.formato.lower() == "csv":
+                    ext = "csv"
+
                 if ext == "xlsx":
                     df = pd.read_excel(arquivo, header=parameter.header, engine='openpyxl')
 
-                # 2. TRATAMENTO PARA XLS (Onde reside o problema da Saúde)
                 elif ext == "xls":
-                    # Tentativa A: Binário (Excel 97-2003 real)
+                    # --- ESTRATÉGIA DE DESCOBERTA DE TIPO (SNIFFING) ---
+                    # Lemos o início do arquivo em binário para identificar a assinatura real
+                    tipo_detectado = "binario"
+
                     try:
-                        df = pd.read_excel(arquivo, header=parameter.header, engine='xlrd')
-                    except Exception:
-                        # Tentativa B: Se falhou, o arquivo é texto (HTML ou XML)
-                        self.logger.info(f"Falha binária em {arquivo.name}. Tentando leitura como texto...")
+                        with open(arquivo, 'rb') as f:
+                            header_bytes = f.read(500)
+                            if b'<?xml' in header_bytes:
+                                tipo_detectado = "xml"
+                            elif b'<table' in header_bytes.lower() or b'<html' in header_bytes.lower():
+                                tipo_detectado = "html"
+                    except Exception as e:
+                        self.logger.error(f"Erro ao ler cabeçalho de {arquivo.name}: {e}")
+
+                    # --- EXECUÇÃO DA EXTRAÇÃO BASEADA NO TIPO ---
+                    if tipo_detectado == "xml":
+                        self.logger.info(f"Processando como XML Spreadsheet 2003: {arquivo.name}")
                         with open(arquivo, 'r', encoding='utf-8', errors='ignore') as f:
                             conteudo = f.read()
 
-                        # B.1 - Tenta ler como HTML (Cura o erro 'File is not a zip file')
+                        from bs4 import BeautifulSoup
+                        soup = BeautifulSoup(conteudo, 'xml')
+                        linhas = []
+
+                        # Procura por Row com ou sem namespace
+                        for row in soup.find_all(['Row', 'ss:Row']):
+                            celulas = [c.get_text(strip=True) for c in
+                                       row.find_all(['Data', 'ss:Data', 'Cell', 'ss:Cell'])]
+                            if any(celulas):
+                                linhas.append(celulas)
+
+                        if linhas:
+                            df = pd.DataFrame(linhas)
+                            h_idx = int(parameter.header) if parameter.header is not None else 0
+
+                            if len(df) > h_idx:
+                                df.columns = df.iloc[h_idx]
+                                df = df.iloc[h_idx + 1:].reset_index(drop=True)
+
+                    elif tipo_detectado == "html":
+                        self.logger.info(f"Processando como HTML: {arquivo.name}")
+                        from io import StringIO
+
+                        with open(arquivo, 'r', encoding='utf-8', errors='ignore') as f:
+                            conteudo = f.read()
+
+                        dfs_html = pd.read_html(StringIO(conteudo))
+                        if dfs_html:
+                            df = dfs_html[0]
+
+                    else:
+                        # Se for binário real (BIFF8), usamos o xlrd
                         try:
-                            dfs_html = pd.read_html(conteudo)
-                            if dfs_html:
-                                df = dfs_html[0]
-                                self.logger.info(f"Sucesso: {arquivo.name} lido como HTML.")
-                        except Exception:
-                            pass
+                            # Forçamos o motor xlrd para evitar que o pandas tente zip/openpyxl
+                            df = pd.read_excel(arquivo, header=parameter.header, engine='xlrd')
+                        except Exception as e:
+                            self.logger.error(f"Falha total no XLS binário {arquivo.name}: {e}")
 
-                        # B.2 - Tenta ler como XML Spreadsheet 2003 (BeautifulSoup)
-                        if df is None:
-                            from bs4 import BeautifulSoup
-                            soup = BeautifulSoup(conteudo, 'xml')
-                            linhas = [[cell.get_text(strip=True) for cell in row.find_all(['Data', 'Cell'])]
-                                      for row in soup.find_all('Row')]
-                            linhas = [l for l in linhas if any(l)]
-
-                            if linhas:
-                                df = pd.DataFrame(linhas)
-                                h_idx = int(float(parameter.header)) if parameter.header is not None else 0
-                                if len(df) > h_idx:
-                                    df.columns = df.iloc[h_idx]
-                                    df = df.iloc[h_idx + 1:].reset_index(drop=True)
-                                self.logger.info(f"Sucesso: {arquivo.name} lido como XML.")
-
-                # 3. TRATAMENTO PARA CSV
                 elif ext == "csv":
-                    df = pd.read_csv(arquivo, sep=parameter.sep, header=parameter.header,
-                                     encoding='utf-8', on_bad_lines='skip')
+                    df = pd.read_csv(arquivo, sep=parameter.sep, header=parameter.header, encoding='utf-8',
+                                     on_bad_lines='skip')
 
-                # --- BLINDAGEM ANTI-FLOAT (Para SAAE e outros) ---
+                # --- BLINDAGEM FINAL (Evita o erro 'float has no len()') ---
                 if df is not None and not df.empty:
-                    # Resolve colunas duplicadas (Comum no Econômico/Imobiliário)
+                    # Remove colunas fantasmas e limpa nomes
                     df = df.loc[:, ~df.columns.duplicated()]
-
-                    # Converte tudo para string e limpa NaNs (Resolve o erro do len() no CPF)
-                    df = df.astype(str).replace(['nan', 'NaN', 'None', '<NA>', 'nan.0'], '')
-
-                    # Limpeza de nomes de colunas (Unnamed) e espaços
                     df.columns = [str(c).strip() for c in df.columns]
                     df = df.loc[:, ~df.columns.str.contains('^Unnamed|^nan', case=False)]
 
+                    # CONVERSÃO CRÍTICA: Transforma TUDO em string e limpa lixo de float
+                    df = df.fillna('').astype(str).replace(['nan', 'NaN', 'None', '<NA>', 'nan.0'], '')
+
                     # Trim em todas as células
-                    df = df.apply(lambda x: x.str.strip() if hasattr(x, 'str') else x)
+                    df = df.apply(lambda x: x.str.strip())
 
                     df = self.__removerRodapePorQuantidade(df, parameter.footer)
                     dfs.append(df)
                 else:
-                    self.logger.warning(f"Arquivo {arquivo.name} ignorado (vazio ou formato incompatível).")
+                    self.logger.warning(f"Arquivo {arquivo.name} resultou em DataFrame vazio.")
 
             except Exception as e:
-                self.logger.error(f"Erro ao processar {arquivo.name}: {e}")
+                self.logger.error(f"Erro fatal ao processar {arquivo.name}: {e}")
 
         return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
