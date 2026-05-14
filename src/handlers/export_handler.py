@@ -8,6 +8,7 @@ from src.handlers.Handler import AbstractHandler
 class ExportHandler(AbstractHandler):
     def __init__(self):
         super().__init__()
+        self.iteracao = 0
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def handle(self, request: Package):
@@ -31,6 +32,7 @@ class ExportHandler(AbstractHandler):
             if request.datas is not None and not request.datas.empty:
                 request.datas.to_csv(out_csv, index=False, sep=';', encoding='utf-8-sig')
                 request.exported = True
+                self.iteracao += 1
                 self.logger.info(f"Arquivo gerado com sucesso: {out_csv}")
             else:
                 request.exported = False

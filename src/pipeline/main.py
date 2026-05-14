@@ -115,9 +115,16 @@ class SAAEApp(ctk.CTk):
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)
         handler = TextHandler(self.log_box)
-        handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', '%H:%M:%S'))
+
+        # Adicionamos [%(name)s] ao formato para mostrar a origem
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)s | [%(name)s] | %(message)s',
+            '%H:%M:%S'
+        )
+
+        handler.setFormatter(formatter)
         root_logger.addHandler(handler)
-        self.logger = root_logger
+        self.logger = logging.getLogger("SAAEApp")
 
     def toggle_password_visibility(self):
         self.is_password_visible = not self.is_password_visible
@@ -208,9 +215,9 @@ class SAAEApp(ctk.CTk):
             relatorio_pastas = "\n".join([f"📁 {p}" for p in sorted(pastas_processadas)])
             resumo = (
                 f"PROCESSAMENTO CONCLUÍDO.\n\n"
-                f"📁 Quantidade de pastas processadas: {total_arquivos}\n\n"
-                f"📄 Quantidade de arquivos CSV gerados: {quantidade_csv}\n\n"
-                f"⚠️ Quantidade de pastas não processadas: {total_arquivos - quantidade_csv}\n"
+                f"📁 Quantidade de arquivos de saida: {total_arquivos}\n\n"
+                f"📄 Quantidade de arquivos CSV gerados: {exporter.iteracao}\n\n"
+                f"⚠️ Quantidade de pastas não processadas: {total_arquivos - exporter.iteracao}\n"
                 f"🔎 Consulte os logs para mais detalhes.\n\n"
             )
 
