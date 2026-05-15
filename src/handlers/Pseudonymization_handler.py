@@ -48,7 +48,8 @@ class PseudonymizationHandler(AbstractHandler):
         colunas_documento = [
             col for col in df.columns
             if col is not None
-               and ('cpf' in str(col).lower() or 'cnpj' in str(col).lower())
+               and ('cpf' in str(col).lower() 
+                    )
                and 'valido' not in str(col).lower()
         ]
 
