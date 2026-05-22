@@ -1,0 +1,642 @@
+import asyncio
+import os
+from datetime import datetime
+
+from nicegui import ui
+
+from app_config import COLUNA_MERGE_KEY, AppPaths, AppSettings
+from app_services import (
+    EntradaService,
+    Etapa2ConfigService,
+    PipelineRunner,
+    RevisaoService,
+    extrair_porcentagem,
+    formatar_score,
+    texto_valor,
+)
+from app_state import AppState
+
+
+class PipelineEnriquecimentoApp:
+    def __init__(self):
+        self.paths = AppPaths()
+        self.settings = AppSettings()
+        self.state = AppState()
+        self.config_service = Etapa2ConfigService(self.paths, self.settings)
+        self.entrada_service = EntradaService(self.paths)
+        self.revisao_service = RevisaoService(self.paths)
+        self.pipeline_runner = PipelineRunner(self.paths)
+        self.campos_config = {}
+        self.progresso_estimado = 0
+
+    def run(self):
+        self._configurar_tema()
+        self._montar_dialogos()
+        self._montar_layout()
+        self._desenhar_revisao()
+        self._atualizar_status_entrada()
+        self._atualizar_status()
+        self._atualizar_botoes()
+        ui.timer(0.1, self.abrir_login, once=True)
+        ui.run(title="Pipeline de Enriquecimento", reload=False)
+
+    def _configurar_tema(self):
+        ui.page_title("Pipeline de Enriquecimento")
+        ui.colors(
+            primary="#2563eb",
+            secondary="#475569",
+            accent="#0f766e",
+            positive="#16a34a",
+            negative="#dc2626",
+            warning="#d97706",
+        )
+        ui.add_head_html(
+            """
+            <style>
+              body {
+                background: #f8fafc;
+                color: #0f172a;
+                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+              }
+              .nicegui-content {
+                max-width: 1380px;
+                margin: 0 auto;
+              }
+              .q-card {
+                border-radius: 10px;
+                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+              }
+              .q-field__label,
+              .q-table th {
+                font-weight: 600;
+                color: #475569;
+              }
+              .q-table tbody td {
+                color: #1e293b;
+              }
+            </style>
+            """
+        )
+
+    def _montar_dialogos(self):
+        self.login_dialog = ui.dialog().props("persistent")
+        with self.login_dialog, ui.card().classes("w-[420px] gap-4 rounded-lg"):
+            ui.label("Acesso ao Sistema").classes("text-xl font-semibold text-slate-900")
+            ui.label("Informe seu nome e a senha padrão para continuar.").classes("text-sm text-slate-600")
+            self.nome_usuario_input = ui.input("Nome do usuário").props("outlined dense").classes("w-full")
+            self.senha_input = ui.input("Senha", password=True, password_toggle_button=True).props(
+                "outlined dense"
+            ).classes("w-full")
+            ui.button("Entrar", on_click=self.autenticar_usuario).props("color=primary unelevated").classes("w-full")
+
+        self.dialog_upload_entrada = ui.dialog()
+        with self.dialog_upload_entrada, ui.card().classes("w-[620px] gap-4 rounded-lg"):
+            ui.label("Carregar Dados da Etapa 1").classes("text-xl font-semibold text-slate-900")
+            ui.label(
+                "Envie somente arquivos CSV. Ao iniciar um novo envio, os arquivos anteriores de dados_entrada serão removidos."
+            ).classes("text-sm text-slate-600")
+            self.upload_status_label = ui.label("Selecione um ou mais arquivos CSV.").classes("text-sm text-slate-600")
+            self.upload_entrada = ui.upload(
+                on_upload=self.salvar_upload_entrada,
+                multiple=True,
+                auto_upload=True,
+            ).props("accept=.csv").classes("w-full")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Fechar", on_click=self.dialog_upload_entrada.close).props("flat")
+
+        self.dialog_download_revisado = ui.dialog()
+        with self.dialog_download_revisado, ui.card().classes("w-[460px] gap-4 rounded-lg"):
+            ui.label("Arquivo Revisado Gerado").classes("text-xl font-semibold text-slate-900")
+            ui.label(f"O arquivo foi salvo em {self.paths.arquivo_revisado}.").classes("text-sm text-slate-600")
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button("Fechar", on_click=self.dialog_download_revisado.close).props("flat")
+                ui.button("Baixar Arquivo", on_click=self.baixar_arquivo_revisado).props("color=primary unelevated")
+
+        self.bloqueio = ui.dialog().props("persistent")
+        with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
+            ui.label("Execução em Andamento").classes("text-lg font-semibold text-slate-900")
+            self.progresso_texto = ui.label("Aguardando...")
+            self.progresso_barra = ui.linear_progress(value=0).props("instant-feedback").classes("w-full")
+            self.progresso_linha = ui.label("").classes("text-sm text-slate-600")
+
+    def _montar_layout(self):
+        with ui.column().classes("w-full gap-5 p-6"):
+            with ui.column().classes("gap-1"):
+                ui.label("Pipeline de Enriquecimento").classes("text-3xl font-bold text-slate-950")
+                ui.label("Execute as etapas, ajuste parâmetros e revise candidatos para o enriquecimento.").classes(
+                    "text-sm text-slate-600"
+                )
+
+            self.usuario_logado_label = ui.label("Usuário: não autenticado").classes(
+                "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
+            )
+
+            self._montar_cards_status()
+            self._montar_card_entrada()
+            self._montar_card_configuracoes()
+            self._montar_card_execucao()
+            self.area_revisao = ui.column().classes("w-full gap-4")
+
+    def _montar_cards_status(self):
+        with ui.row().classes("w-full gap-3"):
+            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
+                ui.label("Etapa 1").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                self.card_etapa1 = ui.label("").classes("text-xl font-semibold text-slate-900")
+            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
+                ui.label("Etapa 2").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                self.card_etapa2 = ui.label("").classes("text-xl font-semibold text-slate-900")
+            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
+                ui.label("Revisão Humana").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                self.card_revisao = ui.label("").classes("text-xl font-semibold text-slate-900")
+
+    def _montar_card_entrada(self):
+        with ui.card().classes("w-full gap-3 border border-slate-200 bg-white"):
+            ui.label("Dados da Etapa 1").classes("text-xl font-semibold text-slate-900")
+            self.arquivos_entrada_label = ui.label("Nenhum CSV carregado.").classes("text-sm text-slate-600")
+            self.botao_upload_entrada = ui.button(
+                "Carregar CSVs",
+                on_click=self.abrir_carregamento_entrada,
+            ).props("color=primary unelevated")
+
+    def _montar_card_configuracoes(self):
+        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
+            ui.label("Configurações da Etapa 2").classes("text-xl font-semibold text-slate-900")
+            config = self.config_service.carregar()
+            with ui.grid(columns=5).classes("w-full gap-3"):
+                for chave, rotulo in [
+                    ("threshold_similaridade", "Merge Automático (%)"),
+                    ("threshold_revisar", "Revisão Humana (%)"),
+                    ("threshold_apoio_nome", "Nome (%)"),
+                    ("threshold_apoio_telefone", "Telefone (%)"),
+                    ("threshold_apoio_email", "E-mail (%)"),
+                    ("threshold_apoio_nascimento", "Nascimento (%)"),
+                    ("threshold_apoio_endereco", "Endereço (%)"),
+                    ("threshold_apoio_numero", "Número (%)"),
+                    ("threshold_apoio_identificador_documento", "Identificador (%)"),
+                    ("max_pares_por_valor_bloco", "Máx. Pares por Bloco"),
+                ]:
+                    self.campos_config[chave] = ui.number(rotulo, value=int(config[chave]), min=0).props(
+                        "outlined dense"
+                    )
+            self.botao_salvar_config = ui.button("Salvar Configuração", on_click=self.salvar_config_ui).props(
+                "color=primary unelevated"
+            )
+
+    def _montar_card_execucao(self):
+        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
+            ui.label("Executar Etapas").classes("text-xl font-semibold text-slate-900")
+            with ui.row().classes("w-full gap-3"):
+                self.botao_etapa1 = ui.button(
+                    "Iniciar Etapa 1",
+                    on_click=self.abrir_confirmacao_etapa1,
+                ).props("color=primary unelevated")
+                self.botao_etapa2 = ui.button(
+                    "Iniciar Etapa 2",
+                    on_click=self.abrir_confirmacao_etapa2,
+                ).props("color=primary unelevated")
+                self.botao_etapa3 = ui.button("Iniciar Etapa 3", on_click=self.iniciar_revisao).props(
+                    "color=primary unelevated"
+                )
+
+    def autenticar_usuario(self):
+        usuario = texto_valor(self.nome_usuario_input.value)
+        senha = texto_valor(self.senha_input.value)
+
+        if not usuario:
+            ui.notify("Informe o nome do usuário.")
+            return
+
+        if senha != self.settings.senha_padrao:
+            ui.notify("Senha inválida.")
+            return
+
+        self.state.autenticado = True
+        self.state.usuario = usuario
+        self.usuario_logado_label.set_text(f"Usuário: {usuario}")
+        self.login_dialog.close()
+        self._atualizar_botoes()
+        ui.notify(f"Bem-vindo, {usuario}.")
+
+    def abrir_login(self):
+        self.login_dialog.open()
+
+    def abrir_carregamento_entrada(self):
+        if self.state.rodando:
+            return
+        if not self.state.autenticado:
+            ui.notify("Faça login antes de carregar arquivos.")
+            self.abrir_login()
+            return
+
+        self.state.upload_entrada_iniciado = False
+        self.state.arquivos_entrada_carregados = []
+        if hasattr(self.upload_entrada, "reset"):
+            self.upload_entrada.reset()
+        self.upload_status_label.set_text("Selecione um ou mais arquivos CSV.")
+        self.dialog_upload_entrada.open()
+
+    async def salvar_upload_entrada(self, evento):
+        nome = self._extrair_nome_upload(evento)
+
+        if not nome.lower().endswith(".csv"):
+            ui.notify(f"Arquivo ignorado: {nome}. Envie apenas CSV.")
+            return
+
+        if not self.state.upload_entrada_iniciado:
+            self.entrada_service.limpar()
+            self.state.upload_entrada_iniciado = True
+
+        arquivo_upload = getattr(evento, "file", None)
+        if arquivo_upload is None:
+            ui.notify("Não foi possível acessar o conteúdo do arquivo enviado.")
+            return
+
+        await arquivo_upload.save(self.entrada_service.destino_upload(nome))
+
+        self.state.arquivos_entrada_carregados.append(nome)
+        self.upload_status_label.set_text(
+            f"{len(self.state.arquivos_entrada_carregados)} arquivo(s) carregado(s) neste envio."
+        )
+        self._atualizar_status_entrada()
+        self._atualizar_status()
+        self._atualizar_botoes()
+
+    def _extrair_nome_upload(self, evento) -> str:
+        arquivo = getattr(evento, "file", None)
+        valor = getattr(arquivo, "name", None)
+        if valor:
+            return os.path.basename(str(valor))
+
+        total = len(self.state.arquivos_entrada_carregados) + 1
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"entrada_{timestamp}_{total}.csv"
+
+    def salvar_config_ui(self):
+        self.config_service.salvar(self._config_atual())
+        ui.notify(f"Configuração salva em {self.paths.arquivo_config_etapa2}.")
+
+    def _config_atual(self) -> dict:
+        return {chave: int(campo.value) for chave, campo in self.campos_config.items()}
+
+    async def abrir_confirmacao_etapa1(self):
+        await self._confirmar_execucao(1, [self.paths.arquivo_etapa1])
+
+    async def abrir_confirmacao_etapa2(self):
+        await self._confirmar_execucao(2, [self.paths.arquivo_etapa2, self.paths.arquivo_log_merges])
+
+    async def _confirmar_execucao(self, etapa: int, arquivos: list[str]):
+        with ui.dialog() as dialog, ui.card().classes("w-[460px] gap-4 rounded-lg"):
+            ui.label(f"Confirmar Etapa {etapa}").classes("text-lg font-semibold text-slate-900")
+            ui.label("Arquivos que serão sobrescritos:").classes("text-sm text-slate-600")
+            for arquivo in arquivos:
+                ui.label(f"- {arquivo}").classes("font-mono text-sm text-slate-700")
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button("Cancelar", on_click=dialog.close).props("flat")
+
+                async def confirmar():
+                    dialog.close()
+                    script = "etapa1.py" if etapa == 1 else "etapa2.py"
+                    await self.executar_script_com_progresso(etapa, script)
+
+                ui.button("Confirmar e Executar", on_click=confirmar).props("color=primary unelevated")
+
+        dialog.open()
+
+    async def executar_script_com_progresso(self, etapa: int, script: str):
+        if etapa == 2:
+            self.config_service.salvar(self._config_atual())
+
+        self.paths.garantir_pasta(self.paths.pasta_gerados)
+        self.paths.garantir_pasta(self.paths.pasta_logs)
+        self.state.rodando = True
+        self._atualizar_status()
+        self._atualizar_botoes()
+        self._abrir_loading(f"Etapa {etapa}: Iniciando...", "")
+
+        if not self.paths.existe(script):
+            self._atualizar_loading(f"Etapa {etapa}: Erro", f"Script não encontrado: {script}.", 0)
+            ui.notify(f"Script não encontrado: {script}.")
+            self.state.rodando = False
+            self.bloqueio.close()
+            self._atualizar_status()
+            self._atualizar_botoes()
+            return
+
+        self.progresso_estimado = 0
+
+        def ao_progredir(linha: str):
+            self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
+            self._atualizar_loading(f"Etapa {etapa}: {self.progresso_estimado}%", linha, self.progresso_estimado)
+
+        codigo = await self.pipeline_runner.executar(script, ao_progredir)
+
+        if codigo == 0:
+            self._atualizar_loading(f"Etapa {etapa}: Concluída", "Processo finalizado.", 100)
+        else:
+            self._atualizar_loading(f"Etapa {etapa}: Erro", "Processo finalizado com erro.", self.progresso_estimado)
+
+        ui.notify(f"Etapa {etapa} {'Concluída' if codigo == 0 else 'Terminou com Erro'}.")
+        self.state.rodando = False
+        self.bloqueio.close()
+        self._atualizar_status()
+        self._atualizar_botoes()
+
+    def _calcular_progresso(self, texto: str, progresso_atual: int) -> int:
+        percentual = extrair_porcentagem(texto)
+        if percentual is None:
+            return min(95, progresso_atual + 1)
+        return max(progresso_atual, percentual)
+
+    def _abrir_loading(self, titulo: str, linha: str):
+        self.progresso_barra.value = 0
+        self.progresso_texto.set_text(titulo)
+        self.progresso_linha.set_text(linha)
+        self.bloqueio.open()
+
+    def _atualizar_loading(self, titulo: str, linha: str, percentual: int):
+        self.progresso_barra.value = max(0, min(100, percentual))
+        self.progresso_texto.set_text(titulo)
+        self.progresso_linha.set_text(linha[-220:] if linha else "Processando...")
+
+    def preparar_revisao(self):
+        if not self.state.autenticado:
+            raise PermissionError("Faça login antes de iniciar a revisão.")
+
+        if not self.paths.existe(self.paths.arquivo_etapa2):
+            raise FileNotFoundError(f"Arquivo não encontrado: {self.paths.arquivo_etapa2}.")
+
+        df = self.revisao_service.carregar_dados()
+        if "id_revisao" not in df.columns or COLUNA_MERGE_KEY not in df.columns:
+            raise ValueError("O arquivo da Etapa 2 não contém as colunas obrigatórias.")
+
+        pares = self.revisao_service.criar_pares_candidatos(df)
+        decisoes = self.revisao_service.carregar_decisoes()
+        indice_atual = self.revisao_service.primeiro_indice_pendente(pares, decisoes)
+        return df, pares, decisoes, indice_atual
+
+    async def iniciar_revisao(self):
+        if self.state.rodando:
+            return
+
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_etapa2}.")
+
+        try:
+            df, pares, decisoes, indice_atual = await asyncio.to_thread(self.preparar_revisao)
+        except (FileNotFoundError, PermissionError, ValueError) as erro:
+            ui.notify(str(erro))
+        except Exception as erro:
+            ui.notify(f"Erro ao carregar revisão: {erro}")
+        else:
+            self.state.df = df
+            self.state.pares = pares
+            self.state.decisoes = decisoes
+            self.state.indice_atual = indice_atual
+            self.state.etapa3_ativa = True
+            ui.notify(f"Revisão carregada com {len(pares)} pares.")
+        finally:
+            self.state.rodando = False
+            self.bloqueio.close()
+            self._atualizar_status()
+            self._atualizar_botoes()
+            if self.state.etapa3_ativa:
+                self._agendar_desenho_revisao()
+
+    def mudar_indice(self, delta: int):
+        total = len(self.state.pares)
+        if total == 0:
+            return
+        self.state.indice_atual = max(0, min(total - 1, self.state.indice_atual + delta))
+        self._agendar_desenho_revisao()
+
+    def decidir(self, decisao: str, observacao: str = ""):
+        if not self.state.pares:
+            return
+        if not self.state.autenticado:
+            ui.notify("Faça login antes de registrar decisões.")
+            self.abrir_login()
+            return
+
+        par = self.state.pares[self.state.indice_atual]
+        self.revisao_service.registrar_decisao(
+            self.state.decisoes,
+            par,
+            self.state.usuario,
+            decisao,
+            observacao,
+        )
+        self._proximo_pendente()
+        self._agendar_desenho_revisao()
+
+    def _proximo_pendente(self):
+        inicio = self.state.indice_atual + 1
+        for indice in range(inicio, len(self.state.pares)):
+            if self.state.pares[indice]["par_id"] not in self.state.decisoes:
+                self.state.indice_atual = indice
+                return
+        self.state.indice_atual = self.revisao_service.primeiro_indice_pendente(
+            self.state.pares,
+            self.state.decisoes,
+        )
+
+    def solicitar_geracao_arquivo_revisado(self):
+        ui.timer(0.05, self.gerar_arquivo_revisado, once=True)
+
+    async def gerar_arquivo_revisado(self):
+        if self.state.df is None or self.state.rodando:
+            return
+
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão humana.")
+
+        try:
+            await asyncio.to_thread(
+                self.revisao_service.salvar_arquivo_revisado,
+                self.state.df,
+                self.state.decisoes,
+            )
+        except Exception as erro:
+            ui.notify(f"Erro ao gerar arquivo revisado: {erro}")
+            self._atualizar_loading("Geração do Arquivo Revisado: Erro", str(erro), 0)
+        else:
+            self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
+            self.bloqueio.close()
+            ui.notify(f"Arquivo salvo: {self.paths.arquivo_revisado}.")
+            self.dialog_download_revisado.open()
+        finally:
+            self.state.rodando = False
+            self._atualizar_botoes()
+            self.bloqueio.close()
+
+    def baixar_arquivo_revisado(self):
+        caminho = self.paths.resolver(self.paths.arquivo_revisado)
+        if not caminho.exists():
+            ui.notify("Gere o arquivo revisado antes de baixar.")
+            return
+        ui.download(str(caminho), filename=caminho.name)
+
+    def _agendar_desenho_revisao(self):
+        ui.timer(0.05, self._desenhar_revisao, once=True)
+
+    def _desenhar_revisao(self):
+        self.area_revisao.clear()
+
+        with self.area_revisao:
+            if not self.state.etapa3_ativa:
+                self.area_revisao.update()
+                return
+
+            ui.separator()
+            ui.label("Revisão Humana").classes("text-2xl font-bold text-slate-900")
+
+            pares = self.state.pares
+            if not pares:
+                ui.label("Nenhum candidato de revisão encontrado.").classes("text-slate-600")
+                self.area_revisao.update()
+                return
+
+            grupos = self._agrupar_pares(pares)
+            self._montar_resumo_revisao(pares, grupos)
+            self._montar_par_atual(pares, grupos)
+
+        self.area_revisao.update()
+
+    def _agrupar_pares(self, pares: list[dict]) -> dict:
+        grupos = {}
+        for par in pares:
+            grupos.setdefault(par["id_revisao"], []).append(par)
+        return grupos
+
+    def _montar_resumo_revisao(self, pares: list[dict], grupos: dict):
+        total_pares = len(grupos)
+        pares_decididos = sum(
+            1
+            for itens in grupos.values()
+            if all(par["par_id"] in self.state.decisoes for par in itens)
+        )
+        pares_pendentes = max(total_pares - pares_decididos, 0)
+        aprovados = sum(1 for item in self.state.decisoes.values() if item.get("decisao") == "aprovar")
+        rejeitados = sum(1 for item in self.state.decisoes.values() if item.get("decisao") == "rejeitar")
+
+        with ui.row().classes("w-full gap-3"):
+            for titulo, valor in [
+                ("Pares", total_pares),
+                ("Pares pendentes", pares_pendentes),
+                ("Pares decididos", pares_decididos),
+                ("Aprovados", aprovados),
+                ("Rejeitados", rejeitados),
+            ]:
+                with ui.card().classes("min-w-[150px] gap-1 rounded-lg shadow-sm border border-slate-200 bg-white"):
+                    ui.label(titulo).classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                    ui.label(str(valor)).classes("text-2xl font-semibold text-slate-900")
+
+    def _montar_par_atual(self, pares: list[dict], grupos: dict):
+        indice = min(self.state.indice_atual, len(pares) - 1)
+        self.state.indice_atual = indice
+        par = pares[indice]
+        ids_ordenados = list(grupos)
+        numero_par = ids_ordenados.index(par["id_revisao"]) + 1
+        total_pares = len(grupos)
+        linha_valida = self.state.df.loc[par["idx_valido"]]
+        linha_invalida = self.state.df.loc[par["idx_invalido"]]
+        decisao_atual = self.state.decisoes.get(par["par_id"], {}).get("decisao", "pendente")
+        observacao_atual = self.state.decisoes.get(par["par_id"], {}).get("observacao", "")
+
+        with ui.card().classes("w-full gap-3"):
+            with ui.row().classes("w-full items-center justify-between"):
+                ui.button("Anterior", on_click=lambda: self.mudar_indice(-1)).props("outline color=primary")
+                ui.label(
+                    f"Par {numero_par} de {total_pares} | Linha {indice + 1} de {len(pares)} | "
+                    f"Grupo {par['id_revisao']} | Status {decisao_atual.capitalize()}"
+                ).classes("font-semibold text-slate-900")
+                ui.button("Próximo", on_click=lambda: self.mudar_indice(1)).props("outline color=primary")
+
+            ui.label(
+                f"Índice válido: {par['idx_valido']} | "
+                f"Índice inválido: {par['idx_invalido']} | "
+                f"Score: {formatar_score(par.get('score_revisao', ''))} | "
+                f"Merge key: {texto_valor(linha_valida[COLUNA_MERGE_KEY])}"
+            ).classes("text-sm text-slate-600")
+
+            colunas = [
+                {"name": "coluna", "label": "Coluna", "field": "coluna", "align": "left"},
+                {"name": "valido", "label": "Válido", "field": "valido", "align": "left"},
+                {"name": "invalido", "label": "Inválido", "field": "invalido", "align": "left"},
+                {"name": "situacao", "label": "Situação", "field": "situacao", "align": "left"},
+            ]
+
+            campo_observacao = ui.textarea("Observações da decisão", value=observacao_atual).props(
+                "outlined autogrow"
+            ).classes("w-full")
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(
+                    "Gerar Arquivo Revisado",
+                    on_click=self.solicitar_geracao_arquivo_revisado,
+                ).props("outline color=primary")
+                ui.button("Baixar Arquivo Revisado", on_click=self.baixar_arquivo_revisado).props(
+                    "outline color=primary"
+                )
+                ui.button("Pausar Revisão", on_click=self.pausar_revisao).props("outline color=secondary")
+                ui.button(
+                    "Rejeitar Merge",
+                    on_click=lambda: self.decidir("rejeitar", campo_observacao.value),
+                ).props("color=negative unelevated")
+                ui.button(
+                    "Aprovar Merge",
+                    on_click=lambda: self.decidir("aprovar", campo_observacao.value),
+                ).props("color=primary unelevated")
+
+            ui.table(
+                columns=colunas,
+                rows=self.revisao_service.montar_comparacao(linha_valida, linha_invalida),
+            ).classes("w-full")
+
+    def pausar_revisao(self):
+        self.state.etapa3_ativa = False
+        self._agendar_desenho_revisao()
+        ui.notify("Revisão pausada. As decisões já registradas ficam salvas.")
+
+    def _atualizar_status_entrada(self):
+        arquivos = self.entrada_service.listar_csvs()
+        if not arquivos:
+            self.arquivos_entrada_label.set_text("Nenhum CSV carregado.")
+            return
+
+        texto = ", ".join(arquivos[:6])
+        if len(arquivos) > 6:
+            texto += f" e mais {len(arquivos) - 6}"
+        self.arquivos_entrada_label.set_text(f"{len(arquivos)} CSV(s): {texto}")
+
+    def _atualizar_status(self):
+        etapa1_existe = self.paths.existe(self.paths.arquivo_etapa1)
+        etapa2_existe = self.paths.existe(self.paths.arquivo_etapa2)
+        self.card_etapa1.set_text("Pronta" if etapa1_existe else "Pendente")
+        self.card_etapa2.set_text("Pronta" if etapa2_existe else "Pendente")
+        self.card_revisao.set_text("Disponível" if etapa2_existe else "Aguardando")
+
+    def _atualizar_botoes(self):
+        etapa1_existe = self.paths.existe(self.paths.arquivo_etapa1)
+        etapa2_existe = self.paths.existe(self.paths.arquivo_etapa2)
+        entrada_existe = bool(self.entrada_service.listar_csvs())
+        rodando = self.state.rodando
+        autenticado = self.state.autenticado
+
+        self._definir_habilitado(self.botao_upload_entrada, autenticado and not rodando)
+        self._definir_habilitado(self.botao_etapa1, autenticado and not rodando and entrada_existe)
+        self._definir_habilitado(self.botao_etapa2, autenticado and not rodando and etapa1_existe)
+        self._definir_habilitado(self.botao_etapa3, autenticado and not rodando and etapa2_existe)
+        self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
+
+    def _definir_habilitado(self, elemento, habilitado: bool):
+        if habilitado:
+            elemento.enable()
+        else:
+            elemento.disable()
+
+
+if __name__ in {"__main__", "__mp_main__"}:
+    PipelineEnriquecimentoApp().run()

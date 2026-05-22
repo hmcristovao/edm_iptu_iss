@@ -1,0 +1,4 @@
+nicegui
+pandas
+recordlinkage
+tqdm
