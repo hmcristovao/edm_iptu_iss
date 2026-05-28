@@ -59,7 +59,7 @@ class Etapa2ConfigService:
         self.settings = settings
 
     def carregar(self) -> dict:
-        caminho_config = self.paths.resolver(self.paths.arquivo_config_etapa2)
+        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_etapa2)
         if not caminho_config.exists():
             return self.settings.etapa2_config_padrao.copy()
 
@@ -74,7 +74,7 @@ class Etapa2ConfigService:
         return config_final
 
     def salvar(self, config: dict):
-        caminho_config = self.paths.resolver(self.paths.arquivo_config_etapa2)
+        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_etapa2)
         with caminho_config.open("w", encoding="utf-8") as arquivo:
             json.dump(config, arquivo, ensure_ascii=False, indent=2)
 
@@ -84,7 +84,7 @@ class EntradaService:
         self.paths = paths
 
     def listar_csvs(self) -> list[str]:
-        pasta = self.paths.resolver(self.paths.pasta_dados_entrada)
+        pasta = self.paths.work_dir
         if not pasta.is_dir():
             return []
 
@@ -94,17 +94,8 @@ class EntradaService:
             if arquivo.is_file() and arquivo.name.lower().endswith(".csv")
         )
 
-    def limpar(self):
-        pasta = self.paths.resolver(self.paths.pasta_dados_entrada)
-        self.paths.garantir_pasta(self.paths.pasta_dados_entrada)
-
-        for arquivo in pasta.iterdir():
-            if arquivo.is_file():
-                arquivo.unlink()
-
-    def destino_upload(self, nome_arquivo: str) -> Path:
-        self.paths.garantir_pasta(self.paths.pasta_dados_entrada)
-        return self.paths.resolver(os.path.join(self.paths.pasta_dados_entrada, nome_arquivo))
+    def pasta_valida(self) -> bool:
+        return self.paths.work_dir.is_dir()
 
 
 class RevisaoService:
@@ -226,11 +217,11 @@ class RevisaoService:
         }
         self.salvar_decisoes(decisoes)
 
-    def salvar_arquivo_revisado(self, df: pd.DataFrame, decisoes: dict[str, dict]):
+    def salvar_arquivo_revisado(self, df: pd.DataFrame, decisoes: dict[str, dict], caminho_saida: str):
         df_revisado = self.aplicar_decisoes(df, decisoes)
-        self.paths.garantir_pasta_arquivo(self.paths.arquivo_revisado)
+        self.paths.garantir_pasta_arquivo(caminho_saida)
         df_revisado.to_csv(
-            self.paths.resolver(self.paths.arquivo_revisado),
+            self.paths.resolver(caminho_saida),
             sep=";",
             encoding="utf-8-sig",
             index=False,
@@ -321,15 +312,17 @@ class PipelineRunner:
         script: str,
         ao_progredir: Callable[[str], None],
     ) -> int:
+        script_path = self.paths.resolver_codigo(script)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["AVALIADOR_WORKDIR"] = str(self.paths.work_dir)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
         processo = await asyncio.create_subprocess_exec(
             sys.executable,
             "-u",
-            script,
-            cwd=str(self.paths.base_dir),
+            str(script_path),
+            cwd=str(self.paths.code_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=env,

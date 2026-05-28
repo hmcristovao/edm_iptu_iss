@@ -3,12 +3,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-@dataclass(frozen=True)
+@dataclass
 class AppPaths:
-    base_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent)
+    code_dir: Path = field(default_factory=lambda: Path(__file__).resolve().parent)
+    work_dir: Path = field(default_factory=lambda: Path(os.environ.get("AVALIADOR_WORKDIR", Path.cwd())).resolve())
     pasta_gerados: str = "arquivos_gerados"
     pasta_logs: str = "logs"
-    pasta_dados_entrada: str = "dados_entrada"
     arquivo_config_etapa2: str = "etapa2_config.json"
 
     @property
@@ -28,14 +28,27 @@ class AppPaths:
         return os.path.join(self.pasta_gerados, "revisao_merges_decisoes.csv")
 
     @property
-    def arquivo_revisado(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa2_final_revisado.csv")
+    def arquivo_etapa3_final(self) -> str:
+        return os.path.join(self.pasta_gerados, "etapa3_final.csv")
+
+    @property
+    def arquivo_etapa3_parcial(self) -> str:
+        return os.path.join(self.pasta_gerados, "etapa3_parcial.csv")
 
     def resolver(self, caminho: str | os.PathLike) -> Path:
         caminho_path = Path(caminho)
         if caminho_path.is_absolute():
             return caminho_path
-        return self.base_dir / caminho_path
+        return self.work_dir / caminho_path
+
+    def resolver_codigo(self, caminho: str | os.PathLike) -> Path:
+        caminho_path = Path(caminho)
+        if caminho_path.is_absolute():
+            return caminho_path
+        return self.code_dir / caminho_path
+
+    def definir_pasta_trabalho(self, caminho: str | os.PathLike):
+        self.work_dir = Path(caminho).expanduser().resolve()
 
     def garantir_pasta(self, caminho: str | os.PathLike):
         self.resolver(caminho).mkdir(parents=True, exist_ok=True)

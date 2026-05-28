@@ -1,14 +1,16 @@
 # Pipeline de Enriquecimento
 
-Aplicação local para executar um pipeline de enriquecimento de dados em três etapas:
+Aplicação local para executar um pipeline de enriquecimento de dados em três etapas, com interface web em **NiceGUI**.
 
-1. **Etapa 1**: lê arquivos CSV de entrada, separa registros válidos/inválidos e gera a base consolidada inicial.
+## Visão Geral
+
+1. **Etapa 1**: lê os CSVs da pasta de trabalho, separa registros válidos/inválidos e gera a base consolidada inicial.
 2. **Etapa 2**: compara registros, aplica regras de similaridade, realiza merges automáticos e marca candidatos para revisão humana.
-3. **Etapa 3**: abre a revisão humana dos pares pendentes, registra aprovação/recusa, observações e usuário revisor, e gera o arquivo final revisado.
+3. **Etapa 3**: permite revisar pares manualmente, registrar aprovação/recusa, observações e usuário responsável, e gerar o arquivo final ou parcial.
 
-A interface gráfica é feita com **NiceGUI** e roda localmente no navegador.
+## Estrutura do Código
 
-## Estrutura do Projeto
+Na pasta do projeto ficam apenas os scripts e arquivos de configuração:
 
 ```text
 avaliador/
@@ -20,18 +22,38 @@ avaliador/
   etapa2.py               # Processamento da etapa 2
   etapa2_config.json      # Configuração editável da etapa 2
   requirements.txt        # Dependências Python
-
-  dados_entrada/          # CSVs enviados para a etapa 1
-  arquivos_gerados/       # Saídas geradas pelas etapas
-  logs/                   # Logs de execução em TXT
+  README.md
 ```
+
+## Pasta de Trabalho
+
+A pasta de trabalho é escolhida na interface. Os CSVs de entrada devem estar diretamente na raiz dessa pasta:
+
+```text
+minha_pasta_de_trabalho/
+  Economico.csv
+  EdpArrecadado.csv
+  EdpFaturado.csv
+  EducacaoResponsaveis.csv
+  ...
+```
+
+Durante a execução, o sistema cria dentro dela:
+
+```text
+minha_pasta_de_trabalho/
+  arquivos_gerados/
+  logs/
+```
+
+Todo o fluxo de dados acontece nessa pasta de trabalho. A pasta do código não muda.
 
 ## Requisitos
 
 - Python 3.11 ou superior
 - Windows PowerShell ou terminal equivalente
 
-Dependências Python:
+Dependências:
 
 ```text
 nicegui
@@ -42,7 +64,7 @@ tqdm
 
 ## Instalação
 
-No terminal, entre na pasta do projeto:
+Entre na pasta do projeto:
 
 ```powershell
 cd C:\Users\dalva\Documents\EDM\edppe\avaliador
@@ -66,25 +88,23 @@ Instale as dependências:
 pip install -r requirements.txt
 ```
 
-## Execução da Interface
+## Executar a Interface
 
-Com o ambiente virtual ativo, rode:
+Com o ambiente virtual ativo:
 
 ```powershell
 python app_nicegui.py
 ```
 
-O NiceGUI exibirá um endereço parecido com:
+Abra no navegador o endereço mostrado pelo NiceGUI, normalmente:
 
 ```text
 http://localhost:8080
 ```
 
-Abra esse endereço no navegador.
-
 ## Login
 
-Ao entrar no sistema, será solicitado:
+Ao abrir o app, informe:
 
 - Nome do usuário
 - Senha padrão
@@ -95,31 +115,40 @@ A senha padrão é:
 1234
 ```
 
-Para alterar a senha sem editar o código, defina a variável de ambiente antes de iniciar o app:
+Para alterar a senha sem editar o código:
 
 ```powershell
 $env:APP_SENHA_PADRAO = "minha_senha"
 python app_nicegui.py
 ```
 
-O nome informado no login é usado para registrar quem aprovou ou recusou merges na etapa 3.
+O nome informado no login é usado na auditoria da etapa 3.
 
 ## Como Usar
 
-### 1. Carregar Dados da Etapa 1
+### 1. Selecionar Pasta de Trabalho
 
-Na interface, use o botão:
+Clique em:
 
 ```text
-Carregar CSVs
+Selecionar Pasta de Trabalho
 ```
 
-Regras do carregamento:
+O modal permite:
 
-- Apenas arquivos `.csv` são aceitos.
-- Ao selecionar novos arquivos, a pasta `dados_entrada/` é limpa.
-- Os novos CSVs enviados são salvos em `dados_entrada/`.
-- Abrir e fechar a janela de upload não apaga arquivos; a limpeza só acontece quando um novo upload realmente começa.
+- listar os discos disponíveis;
+- entrar em subpastas;
+- voltar para a pasta anterior;
+- atualizar a pasta atual;
+- ver quantos CSVs existem na pasta atual;
+- confirmar a pasta aberta com **Usar Pasta**.
+
+Ao confirmar, o sistema:
+
+- usa essa pasta como raiz de dados;
+- lê os CSVs diretamente dela;
+- cria `arquivos_gerados/`, se necessário;
+- cria `logs/`, se necessário.
 
 ### 2. Iniciar Etapa 1
 
@@ -129,13 +158,9 @@ Clique em:
 Iniciar Etapa 1
 ```
 
-A etapa 1 lê os arquivos de:
+A etapa 1 lê os CSVs da pasta de trabalho.
 
-```text
-dados_entrada/
-```
-
-E gera:
+Saídas:
 
 ```text
 arquivos_gerados/etapa1_final.csv
@@ -144,9 +169,9 @@ logs/etapa1_log.txt
 
 ### 3. Configurar Etapa 2
 
-Na área **Configurações da Etapa 2**, ajuste os thresholds pela interface.
+Na área **Configurações da Etapa 2**, ajuste os thresholds.
 
-Essas configurações são salvas em:
+Essas configurações são salvas na pasta do código:
 
 ```text
 etapa2_config.json
@@ -181,7 +206,7 @@ arquivos_gerados/etapa2_log_merges.csv
 logs/etapa2_log.txt
 ```
 
-Ao rodar a etapa 2, decisões antigas da revisão humana são removidas para evitar reaproveitar decisões de uma base anterior.
+Ao rodar a etapa 2, decisões antigas da revisão humana são removidas para evitar reaproveitar decisões de outra base.
 
 ### 5. Iniciar Etapa 3
 
@@ -191,7 +216,7 @@ Clique em:
 Iniciar Etapa 3
 ```
 
-A etapa 3 carrega os pares marcados para revisão humana em:
+A etapa 3 carrega:
 
 ```text
 arquivos_gerados/etapa2_final.csv
@@ -199,12 +224,12 @@ arquivos_gerados/etapa2_final.csv
 
 Durante a revisão, é possível:
 
-- Aprovar merge
-- Rejeitar merge
-- Escrever observações
-- Pausar e continuar depois
-- Gerar arquivo revisado
-- Baixar arquivo revisado
+- aprovar merge;
+- rejeitar merge;
+- escrever observações;
+- pausar e continuar depois;
+- gerar arquivo revisado;
+- baixar o arquivo gerado.
 
 As decisões são salvas em:
 
@@ -212,15 +237,32 @@ As decisões são salvas em:
 arquivos_gerados/revisao_merges_decisoes.csv
 ```
 
-O arquivo final revisado é salvo em:
+## Saídas da Etapa 3
+
+O nome do arquivo depende da situação da revisão:
 
 ```text
-arquivos_gerados/etapa2_final_revisado.csv
+arquivos_gerados/etapa3_final.csv
+arquivos_gerados/etapa3_parcial.csv
 ```
+
+Se não houver pares pendentes, o sistema gera:
+
+```text
+etapa3_final.csv
+```
+
+Se ainda houver pares pendentes, o sistema gera:
+
+```text
+etapa3_parcial.csv
+```
+
+Apenas um desses dois arquivos fica disponível por vez. Ao gerar um, o outro é removido automaticamente.
 
 ## Auditoria da Revisão Humana
 
-Cada decisão da etapa 3 registra:
+Cada decisão registra:
 
 - `usuario_revisor`
 - `decisao`
@@ -228,7 +270,7 @@ Cada decisão da etapa 3 registra:
 - `data_decisao`
 - `score_revisao`
 
-No arquivo final revisado, as informações de auditoria entram nas colunas:
+No arquivo revisado, a auditoria entra nas colunas:
 
 - `usuario_revisao`
 - `decisao_revisao`
@@ -239,51 +281,25 @@ Para merges aprovados, a auditoria fica na linha válida enriquecida.
 
 Para merges rejeitados, a auditoria fica na linha inválida que permanece no arquivo.
 
-## Arquivos Gerados
-
-Principais saídas:
-
-```text
-arquivos_gerados/etapa1_final.csv
-arquivos_gerados/etapa2_final.csv
-arquivos_gerados/etapa2_log_merges.csv
-arquivos_gerados/revisao_merges_decisoes.csv
-arquivos_gerados/etapa2_final_revisado.csv
-```
-
-Logs:
-
-```text
-logs/etapa1_log.txt
-logs/etapa2_log.txt
-```
-
 ## Executar Etapas Pelo Terminal
 
-Embora o fluxo recomendado seja pela interface, também é possível rodar as etapas manualmente:
+O fluxo recomendado é pela interface, porque ela define a pasta de trabalho automaticamente para os subprocessos.
+
+Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
 
 ```powershell
+$env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\**********"
 python etapa1.py
 python etapa2.py
 ```
 
-Atenção: para a etapa 1 funcionar, os CSVs precisam estar em:
-
-```text
-dados_entrada/
-```
+Sem `AVALIADOR_WORKDIR`, as etapas usam a própria pasta do código como pasta de trabalho.
 
 ## Solução de Problemas
 
 ### Etapa 1 não encontra arquivos
 
-Confira se os CSVs foram carregados em:
-
-```text
-dados_entrada/
-```
-
-O botão **Iniciar Etapa 1** só é liberado quando há pelo menos um CSV nessa pasta.
+Confira se os CSVs estão diretamente na raiz da pasta de trabalho escolhida.
 
 ### Etapa 2 não inicia
 
@@ -301,9 +317,9 @@ Confirme se a etapa 2 gerou:
 arquivos_gerados/etapa2_final.csv
 ```
 
-### Upload apagou arquivos antigos
+### Os arquivos foram gerados na pasta errada
 
-Esse é o comportamento esperado somente quando um novo upload começa. Ao selecionar novos CSVs, a pasta `dados_entrada/` é limpa para evitar mistura entre execuções.
+Confira a pasta exibida em **Pasta de Trabalho** na interface.
 
 ### Quero trocar a senha padrão
 

@@ -1,6 +1,6 @@
 import asyncio
 import os
-from datetime import datetime
+from pathlib import Path
 
 from nicegui import ui
 
@@ -28,6 +28,7 @@ class PipelineEnriquecimentoApp:
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
+        self.navegador_pasta_atual = self.paths.work_dir
 
     def run(self):
         self._configurar_tema()
@@ -89,25 +90,31 @@ class PipelineEnriquecimentoApp:
             ).classes("w-full")
             ui.button("Entrar", on_click=self.autenticar_usuario).props("color=primary unelevated").classes("w-full")
 
-        self.dialog_upload_entrada = ui.dialog()
-        with self.dialog_upload_entrada, ui.card().classes("w-[620px] gap-4 rounded-lg"):
-            ui.label("Carregar Dados da Etapa 1").classes("text-xl font-semibold text-slate-900")
+        self.dialog_pasta_trabalho = ui.dialog()
+        with self.dialog_pasta_trabalho, ui.card().classes("w-[760px] gap-4 rounded-lg"):
+            ui.label("Selecionar Pasta de Trabalho").classes("text-xl font-semibold text-slate-900")
             ui.label(
-                "Envie somente arquivos CSV. Ao iniciar um novo envio, os arquivos anteriores de dados_entrada serão removidos."
+                "Navegue até a pasta onde estão os CSVs de entrada. As pastas arquivos_gerados e logs serão criadas dentro dela."
             ).classes("text-sm text-slate-600")
-            self.upload_status_label = ui.label("Selecione um ou mais arquivos CSV.").classes("text-sm text-slate-600")
-            self.upload_entrada = ui.upload(
-                on_upload=self.salvar_upload_entrada,
-                multiple=True,
-                auto_upload=True,
-            ).props("accept=.csv").classes("w-full")
+            self.navegador_path_label = ui.label("").classes(
+                "w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700"
+            )
+            self.pasta_trabalho_status_label = ui.label("").classes("text-sm text-slate-600")
+            with ui.row().classes("w-full gap-2"):
+                ui.button("Discos", on_click=self.ir_para_lista_de_discos).props("outline color=secondary")
+                ui.button("Voltar", on_click=self.ir_para_pasta_pai).props("outline color=secondary")
+                ui.button("Atualizar", on_click=self.atualizar_navegador_pastas).props("outline color=secondary")
+            self.navegador_area = ui.column().classes(
+                "w-full max-h-[430px] gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2"
+            )
             with ui.row().classes("w-full justify-end"):
-                ui.button("Fechar", on_click=self.dialog_upload_entrada.close).props("flat")
+                ui.button("Cancelar", on_click=self.dialog_pasta_trabalho.close).props("flat")
+                ui.button("Usar Pasta", on_click=self.confirmar_pasta_trabalho).props("color=primary unelevated")
 
         self.dialog_download_revisado = ui.dialog()
         with self.dialog_download_revisado, ui.card().classes("w-[460px] gap-4 rounded-lg"):
             ui.label("Arquivo Revisado Gerado").classes("text-xl font-semibold text-slate-900")
-            ui.label(f"O arquivo foi salvo em {self.paths.arquivo_revisado}.").classes("text-sm text-slate-600")
+            self.download_revisado_label = ui.label("").classes("text-sm text-slate-600")
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("Fechar", on_click=self.dialog_download_revisado.close).props("flat")
                 ui.button("Baixar Arquivo", on_click=self.baixar_arquivo_revisado).props("color=primary unelevated")
@@ -151,11 +158,12 @@ class PipelineEnriquecimentoApp:
 
     def _montar_card_entrada(self):
         with ui.card().classes("w-full gap-3 border border-slate-200 bg-white"):
-            ui.label("Dados da Etapa 1").classes("text-xl font-semibold text-slate-900")
+            ui.label("Pasta de Trabalho").classes("text-xl font-semibold text-slate-900")
+            self.pasta_trabalho_label = ui.label("").classes("text-sm font-medium text-slate-700")
             self.arquivos_entrada_label = ui.label("Nenhum CSV carregado.").classes("text-sm text-slate-600")
-            self.botao_upload_entrada = ui.button(
-                "Carregar CSVs",
-                on_click=self.abrir_carregamento_entrada,
+            self.botao_pasta_trabalho = ui.button(
+                "Selecionar Pasta de Trabalho",
+                on_click=self.abrir_selecao_pasta_trabalho,
             ).props("color=primary unelevated")
 
     def _montar_card_configuracoes(self):
@@ -220,56 +228,104 @@ class PipelineEnriquecimentoApp:
     def abrir_login(self):
         self.login_dialog.open()
 
-    def abrir_carregamento_entrada(self):
+    def abrir_selecao_pasta_trabalho(self):
         if self.state.rodando:
             return
         if not self.state.autenticado:
-            ui.notify("Faça login antes de carregar arquivos.")
+            ui.notify("Faça login antes de selecionar a pasta de trabalho.")
             self.abrir_login()
             return
 
-        self.state.upload_entrada_iniciado = False
-        self.state.arquivos_entrada_carregados = []
-        if hasattr(self.upload_entrada, "reset"):
-            self.upload_entrada.reset()
-        self.upload_status_label.set_text("Selecione um ou mais arquivos CSV.")
-        self.dialog_upload_entrada.open()
+        self.navegador_pasta_atual = self.paths.work_dir if self.paths.work_dir.exists() else Path.home()
+        self.pasta_trabalho_status_label.set_text("")
+        self.atualizar_navegador_pastas()
+        self.dialog_pasta_trabalho.open()
 
-    async def salvar_upload_entrada(self, evento):
-        nome = self._extrair_nome_upload(evento)
-
-        if not nome.lower().endswith(".csv"):
-            ui.notify(f"Arquivo ignorado: {nome}. Envie apenas CSV.")
+    def confirmar_pasta_trabalho(self):
+        caminho = self.navegador_pasta_atual
+        if not caminho.is_dir():
+            self.pasta_trabalho_status_label.set_text("Pasta não encontrada.")
             return
 
-        if not self.state.upload_entrada_iniciado:
-            self.entrada_service.limpar()
-            self.state.upload_entrada_iniciado = True
-
-        arquivo_upload = getattr(evento, "file", None)
-        if arquivo_upload is None:
-            ui.notify("Não foi possível acessar o conteúdo do arquivo enviado.")
-            return
-
-        await arquivo_upload.save(self.entrada_service.destino_upload(nome))
-
-        self.state.arquivos_entrada_carregados.append(nome)
-        self.upload_status_label.set_text(
-            f"{len(self.state.arquivos_entrada_carregados)} arquivo(s) carregado(s) neste envio."
-        )
+        self.paths.definir_pasta_trabalho(caminho)
+        self.paths.garantir_pasta(self.paths.pasta_gerados)
+        self.paths.garantir_pasta(self.paths.pasta_logs)
+        self.dialog_pasta_trabalho.close()
         self._atualizar_status_entrada()
         self._atualizar_status()
         self._atualizar_botoes()
+        ui.notify(f"Pasta de trabalho definida: {self.paths.work_dir}")
 
-    def _extrair_nome_upload(self, evento) -> str:
-        arquivo = getattr(evento, "file", None)
-        valor = getattr(arquivo, "name", None)
-        if valor:
-            return os.path.basename(str(valor))
+    def atualizar_navegador_pastas(self):
+        self.navegador_area.clear()
+        atual = self.navegador_pasta_atual
+        self.navegador_path_label.set_text(str(atual))
+        self.pasta_trabalho_status_label.set_text(self._resumo_pasta(atual))
 
-        total = len(self.state.arquivos_entrada_carregados) + 1
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"entrada_{timestamp}_{total}.csv"
+        with self.navegador_area:
+            pastas = self._listar_pastas_navegador(atual)
+            if not pastas:
+                ui.label("Nenhuma subpasta disponível.").classes("text-sm text-slate-500")
+                return
+
+            for pasta in pastas:
+                ui.button(
+                    pasta.name,
+                    on_click=lambda p=pasta: self.ir_para_pasta(p),
+                ).props("flat align=left").classes("w-full justify-start text-left")
+
+    def ir_para_pasta(self, pasta: Path):
+        if pasta.is_dir():
+            self.navegador_pasta_atual = pasta
+            self.atualizar_navegador_pastas()
+
+    def ir_para_pasta_pai(self):
+        atual = self.navegador_pasta_atual
+        pai = atual.parent
+        if pai != atual and pai.exists():
+            self.navegador_pasta_atual = pai
+            self.atualizar_navegador_pastas()
+
+    def ir_para_lista_de_discos(self):
+        self.navegador_area.clear()
+        self.navegador_path_label.set_text("Discos disponíveis")
+        self.pasta_trabalho_status_label.set_text("Selecione um disco para navegar.")
+
+        with self.navegador_area:
+            for disco in self._listar_discos():
+                ui.button(
+                    str(disco),
+                    on_click=lambda p=disco: self.ir_para_pasta(p),
+                ).props("flat align=left").classes("w-full justify-start text-left")
+
+    def _listar_discos(self) -> list[Path]:
+        if os.name != "nt":
+            return [Path("/")]
+
+        discos = []
+        for letra in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+            disco = Path(f"{letra}:\\")
+            if disco.exists():
+                discos.append(disco)
+        return discos
+
+    def _listar_pastas_navegador(self, pasta: Path) -> list[Path]:
+        try:
+            return sorted(
+                [item for item in pasta.iterdir() if item.is_dir()],
+                key=lambda item: item.name.lower(),
+            )
+        except (OSError, PermissionError):
+            self.pasta_trabalho_status_label.set_text("Não foi possível acessar esta pasta.")
+            return []
+
+    def _resumo_pasta(self, pasta: Path) -> str:
+        try:
+            qtd_csv = sum(1 for item in pasta.iterdir() if item.is_file() and item.name.lower().endswith(".csv"))
+        except (OSError, PermissionError):
+            return "Não foi possível contar os CSVs desta pasta."
+
+        return f"CSVs encontrados nesta pasta: {qtd_csv}"
 
     def salvar_config_ui(self):
         self.config_service.salvar(self._config_atual())
@@ -314,7 +370,7 @@ class PipelineEnriquecimentoApp:
         self._atualizar_botoes()
         self._abrir_loading(f"Etapa {etapa}: Iniciando...", "")
 
-        if not self.paths.existe(script):
+        if not self.paths.resolver_codigo(script).exists():
             self._atualizar_loading(f"Etapa {etapa}: Erro", f"Script não encontrado: {script}.", 0)
             ui.notify(f"Script não encontrado: {script}.")
             self.state.rodando = False
@@ -448,6 +504,13 @@ class PipelineEnriquecimentoApp:
         if self.state.df is None or self.state.rodando:
             return
 
+        arquivo_saida = self._definir_arquivo_etapa3_saida()
+        arquivo_remover = (
+            self.paths.arquivo_etapa3_parcial
+            if arquivo_saida == self.paths.arquivo_etapa3_final
+            else self.paths.arquivo_etapa3_final
+        )
+
         self.state.rodando = True
         self._atualizar_botoes()
         self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão humana.")
@@ -457,14 +520,18 @@ class PipelineEnriquecimentoApp:
                 self.revisao_service.salvar_arquivo_revisado,
                 self.state.df,
                 self.state.decisoes,
+                arquivo_saida,
             )
+            await asyncio.to_thread(self._remover_arquivo_se_existir, arquivo_remover)
         except Exception as erro:
             ui.notify(f"Erro ao gerar arquivo revisado: {erro}")
             self._atualizar_loading("Geração do Arquivo Revisado: Erro", str(erro), 0)
         else:
+            self.state.arquivo_etapa3_atual = arquivo_saida
             self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
             self.bloqueio.close()
-            ui.notify(f"Arquivo salvo: {self.paths.arquivo_revisado}.")
+            self.download_revisado_label.set_text(f"O arquivo foi salvo em {arquivo_saida}.")
+            ui.notify(f"Arquivo salvo: {arquivo_saida}.")
             self.dialog_download_revisado.open()
         finally:
             self.state.rodando = False
@@ -472,11 +539,45 @@ class PipelineEnriquecimentoApp:
             self.bloqueio.close()
 
     def baixar_arquivo_revisado(self):
-        caminho = self.paths.resolver(self.paths.arquivo_revisado)
+        arquivo = self.state.arquivo_etapa3_atual or self._arquivo_etapa3_existente()
+        if not arquivo:
+            ui.notify("Gere o arquivo revisado antes de baixar.")
+            return
+
+        caminho = self.paths.resolver(arquivo)
         if not caminho.exists():
             ui.notify("Gere o arquivo revisado antes de baixar.")
             return
         ui.download(str(caminho), filename=caminho.name)
+
+    def _definir_arquivo_etapa3_saida(self) -> str:
+        return (
+            self.paths.arquivo_etapa3_final
+            if self._contar_pares_pendentes() == 0
+            else self.paths.arquivo_etapa3_parcial
+        )
+
+    def _contar_pares_pendentes(self) -> int:
+        grupos = self._agrupar_pares(self.state.pares)
+        total_pares = len(grupos)
+        pares_decididos = sum(
+            1
+            for itens in grupos.values()
+            if all(par["par_id"] in self.state.decisoes for par in itens)
+        )
+        return max(total_pares - pares_decididos, 0)
+
+    def _remover_arquivo_se_existir(self, arquivo: str):
+        caminho = self.paths.resolver(arquivo)
+        if caminho.exists():
+            caminho.unlink()
+
+    def _arquivo_etapa3_existente(self) -> str:
+        if self.paths.existe(self.paths.arquivo_etapa3_final):
+            return self.paths.arquivo_etapa3_final
+        if self.paths.existe(self.paths.arquivo_etapa3_parcial):
+            return self.paths.arquivo_etapa3_parcial
+        return ""
 
     def _agendar_desenho_revisao(self):
         ui.timer(0.05, self._desenhar_revisao, once=True)
@@ -561,6 +662,8 @@ class PipelineEnriquecimentoApp:
                 f"Merge key: {texto_valor(linha_valida[COLUNA_MERGE_KEY])}"
             ).classes("text-sm text-slate-600")
 
+            self._montar_registros_lado_a_lado(linha_valida, linha_invalida)
+
             colunas = [
                 {"name": "coluna", "label": "Coluna", "field": "coluna", "align": "left"},
                 {"name": "valido", "label": "Válido", "field": "valido", "align": "left"},
@@ -590,10 +693,39 @@ class PipelineEnriquecimentoApp:
                     on_click=lambda: self.decidir("aprovar", campo_observacao.value),
                 ).props("color=primary unelevated")
 
-            ui.table(
-                columns=colunas,
-                rows=self.revisao_service.montar_comparacao(linha_valida, linha_invalida),
-            ).classes("w-full")
+    def _montar_registros_lado_a_lado(self, linha_valida, linha_invalida):
+        colunas = [
+            {"name": "campo", "label": "Campo", "field": "campo", "align": "left"},
+            {"name": "valor", "label": "Valor", "field": "valor", "align": "left"},
+        ]
+
+        with ui.row().classes("w-full gap-3 items-start"):
+            with ui.card().classes("flex-1 min-w-0 gap-2 border border-slate-200 bg-white shadow-none"):
+                ui.label("Registro válido").classes("text-sm font-semibold text-slate-900")
+                with ui.element("div").classes("w-full max-h-[420px] overflow-y-auto rounded-lg border border-slate-200"):
+                    ui.table(
+                        columns=colunas,
+                        rows=self._linhas_registro(linha_valida),
+                        pagination={"rowsPerPage": 0},
+                    ).props("hide-pagination").classes("w-full")
+
+            with ui.card().classes("flex-1 min-w-0 gap-2 border border-slate-200 bg-white shadow-none"):
+                ui.label("Registro inválido").classes("text-sm font-semibold text-slate-900")
+                with ui.element("div").classes("w-full max-h-[420px] overflow-y-auto rounded-lg border border-slate-200"):
+                    ui.table(
+                        columns=colunas,
+                        rows=self._linhas_registro(linha_invalida),
+                        pagination={"rowsPerPage": 0},
+                    ).props("hide-pagination").classes("w-full")
+
+    def _linhas_registro(self, linha) -> list[dict]:
+        linhas = []
+        for campo, valor in linha.items():
+            texto = texto_valor(valor)
+            if not texto:
+                continue
+            linhas.append({"campo": campo, "valor": texto})
+        return linhas
 
     def pausar_revisao(self):
         self.state.etapa3_ativa = False
@@ -601,9 +733,10 @@ class PipelineEnriquecimentoApp:
         ui.notify("Revisão pausada. As decisões já registradas ficam salvas.")
 
     def _atualizar_status_entrada(self):
+        self.pasta_trabalho_label.set_text(f"Pasta atual: {self.paths.work_dir}")
         arquivos = self.entrada_service.listar_csvs()
         if not arquivos:
-            self.arquivos_entrada_label.set_text("Nenhum CSV carregado.")
+            self.arquivos_entrada_label.set_text("Nenhum CSV encontrado na pasta de trabalho.")
             return
 
         texto = ", ".join(arquivos[:6])
@@ -625,7 +758,7 @@ class PipelineEnriquecimentoApp:
         rodando = self.state.rodando
         autenticado = self.state.autenticado
 
-        self._definir_habilitado(self.botao_upload_entrada, autenticado and not rodando)
+        self._definir_habilitado(self.botao_pasta_trabalho, autenticado and not rodando)
         self._definir_habilitado(self.botao_etapa1, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_etapa2, autenticado and not rodando and etapa1_existe)
         self._definir_habilitado(self.botao_etapa3, autenticado and not rodando and etapa2_existe)

@@ -28,7 +28,8 @@ except ImportError:
             return None
 
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CODE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.environ.get("AVALIADOR_WORKDIR", CODE_DIR)
 PASTA_GERADOS = "arquivos_gerados"
 PASTA_LOGS = "logs"
 ARQUIVO_ENTRADA = os.path.join(PASTA_GERADOS, "etapa1_final.csv")
@@ -131,7 +132,7 @@ def aplicar_configuracao_externa():
     global MAX_PARES_POR_VALOR_BLOCO
 
     try:
-        with open(os.path.join(BASE_DIR, ARQUIVO_CONFIGURACAO), "r", encoding="utf-8") as arquivo:
+        with open(os.path.join(CODE_DIR, ARQUIVO_CONFIGURACAO), "r", encoding="utf-8") as arquivo:
             config = json.load(arquivo)
     except FileNotFoundError:
         return

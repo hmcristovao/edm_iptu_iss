@@ -7,8 +7,9 @@ import sys
 import pandas as pd
 
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PASTA_DADOS = "dados_entrada"
+CODE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.environ.get("AVALIADOR_WORKDIR", CODE_DIR)
+PASTA_DADOS = "."
 PASTA_GERADOS = "arquivos_gerados"
 PASTA_LOGS = "logs"
 ARQUIVO_FINAL = os.path.join(PASTA_GERADOS, "etapa1_final.csv")

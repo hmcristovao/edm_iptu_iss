@@ -9,9 +9,8 @@ class AppState:
     etapa3_ativa: bool = False
     autenticado: bool = False
     usuario: str = ""
-    upload_entrada_iniciado: bool = False
-    arquivos_entrada_carregados: list[str] = field(default_factory=list)
     df: pd.DataFrame | None = None
     pares: list[dict] = field(default_factory=list)
     decisoes: dict[str, dict] = field(default_factory=dict)
     indice_atual: int = 0
+    arquivo_etapa3_atual: str = ""
