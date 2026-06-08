@@ -133,14 +133,13 @@ Clique em:
 Selecionar Pasta de Trabalho
 ```
 
-O modal permite:
+Cole no campo o caminho completo da pasta onde já estão os CSVs de entrada.
 
-- listar os discos disponíveis;
-- entrar em subpastas;
-- voltar para a pasta anterior;
-- atualizar a pasta atual;
-- ver quantos CSVs existem na pasta atual;
-- confirmar a pasta aberta com **Usar Pasta**.
+Exemplo:
+
+```text
+C:\Users\********\Documents\pasta
+```
 
 Ao confirmar, o sistema:
 

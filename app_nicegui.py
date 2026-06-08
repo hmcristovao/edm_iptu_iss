@@ -1,6 +1,5 @@
 import asyncio
 import os
-from pathlib import Path
 
 from nicegui import ui
 
@@ -28,7 +27,6 @@ class IntegracaoEnriquecimentoApp:
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
-        self.navegador_pasta_atual = self.paths.work_dir
 
     def run(self):
         self._configurar_tema()
@@ -91,22 +89,15 @@ class IntegracaoEnriquecimentoApp:
             ui.button("Entrar", on_click=self.autenticar_usuario).props("color=primary unelevated").classes("w-full")
 
         self.dialog_pasta_trabalho = ui.dialog()
-        with self.dialog_pasta_trabalho, ui.card().classes("w-[760px] gap-4 rounded-lg"):
+        with self.dialog_pasta_trabalho, ui.card().classes("w-[680px] gap-4 rounded-lg"):
             ui.label("Selecionar Pasta de Trabalho").classes("text-xl font-semibold text-slate-900")
             ui.label(
-                "Navegue até a pasta onde estão os CSVs de entrada. As pastas arquivos_gerados e logs serão criadas dentro dela."
+                "Cole o caminho da pasta onde estão os CSVs de entrada. As pastas arquivos_gerados e logs serão criadas dentro dela."
             ).classes("text-sm text-slate-600")
-            self.navegador_path_label = ui.label("").classes(
-                "w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700"
+            self.pasta_trabalho_input = ui.input("Caminho da pasta de trabalho").props("outlined dense").classes(
+                "w-full"
             )
             self.pasta_trabalho_status_label = ui.label("").classes("text-sm text-slate-600")
-            with ui.row().classes("w-full gap-2"):
-                ui.button("Discos", on_click=self.ir_para_lista_de_discos).props("outline color=secondary")
-                ui.button("Voltar", on_click=self.ir_para_pasta_pai).props("outline color=secondary")
-                ui.button("Atualizar", on_click=self.atualizar_navegador_pastas).props("outline color=secondary")
-            self.navegador_area = ui.column().classes(
-                "w-full max-h-[430px] gap-1 overflow-y-auto rounded-lg border border-slate-200 p-2"
-            )
             with ui.row().classes("w-full justify-end"):
                 ui.button("Cancelar", on_click=self.dialog_pasta_trabalho.close).props("flat")
                 ui.button("Usar Pasta", on_click=self.confirmar_pasta_trabalho).props("color=primary unelevated")
@@ -236,14 +227,17 @@ class IntegracaoEnriquecimentoApp:
             self.abrir_login()
             return
 
-        self.navegador_pasta_atual = self.paths.work_dir if self.paths.work_dir.exists() else Path.home()
+        self.pasta_trabalho_input.value = str(self.paths.work_dir)
         self.pasta_trabalho_status_label.set_text("")
-        self.atualizar_navegador_pastas()
         self.dialog_pasta_trabalho.open()
 
     def confirmar_pasta_trabalho(self):
-        caminho = self.navegador_pasta_atual
-        if not caminho.is_dir():
+        caminho = texto_valor(self.pasta_trabalho_input.value)
+        if not caminho:
+            self.pasta_trabalho_status_label.set_text("Informe o caminho da pasta.")
+            return
+
+        if not os.path.isdir(caminho):
             self.pasta_trabalho_status_label.set_text("Pasta não encontrada.")
             return
 
@@ -255,77 +249,6 @@ class IntegracaoEnriquecimentoApp:
         self._atualizar_status()
         self._atualizar_botoes()
         ui.notify(f"Pasta de trabalho definida: {self.paths.work_dir}")
-
-    def atualizar_navegador_pastas(self):
-        self.navegador_area.clear()
-        atual = self.navegador_pasta_atual
-        self.navegador_path_label.set_text(str(atual))
-        self.pasta_trabalho_status_label.set_text(self._resumo_pasta(atual))
-
-        with self.navegador_area:
-            pastas = self._listar_pastas_navegador(atual)
-            if not pastas:
-                ui.label("Nenhuma subpasta disponível.").classes("text-sm text-slate-500")
-                return
-
-            for pasta in pastas:
-                ui.button(
-                    pasta.name,
-                    on_click=lambda p=pasta: self.ir_para_pasta(p),
-                ).props("flat align=left").classes("w-full justify-start text-left")
-
-    def ir_para_pasta(self, pasta: Path):
-        if pasta.is_dir():
-            self.navegador_pasta_atual = pasta
-            self.atualizar_navegador_pastas()
-
-    def ir_para_pasta_pai(self):
-        atual = self.navegador_pasta_atual
-        pai = atual.parent
-        if pai != atual and pai.exists():
-            self.navegador_pasta_atual = pai
-            self.atualizar_navegador_pastas()
-
-    def ir_para_lista_de_discos(self):
-        self.navegador_area.clear()
-        self.navegador_path_label.set_text("Discos disponíveis")
-        self.pasta_trabalho_status_label.set_text("Selecione um disco para navegar.")
-
-        with self.navegador_area:
-            for disco in self._listar_discos():
-                ui.button(
-                    str(disco),
-                    on_click=lambda p=disco: self.ir_para_pasta(p),
-                ).props("flat align=left").classes("w-full justify-start text-left")
-
-    def _listar_discos(self) -> list[Path]:
-        if os.name != "nt":
-            return [Path("/")]
-
-        discos = []
-        for letra in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-            disco = Path(f"{letra}:\\")
-            if disco.exists():
-                discos.append(disco)
-        return discos
-
-    def _listar_pastas_navegador(self, pasta: Path) -> list[Path]:
-        try:
-            return sorted(
-                [item for item in pasta.iterdir() if item.is_dir()],
-                key=lambda item: item.name.lower(),
-            )
-        except (OSError, PermissionError):
-            self.pasta_trabalho_status_label.set_text("Não foi possível acessar esta pasta.")
-            return []
-
-    def _resumo_pasta(self, pasta: Path) -> str:
-        try:
-            qtd_csv = sum(1 for item in pasta.iterdir() if item.is_file() and item.name.lower().endswith(".csv"))
-        except (OSError, PermissionError):
-            return "Não foi possível contar os CSVs desta pasta."
-
-        return f"CSVs encontrados nesta pasta: {qtd_csv}"
 
     def salvar_config_ui(self):
         self.config_service.salvar(self._config_atual())
