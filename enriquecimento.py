@@ -32,12 +32,12 @@ CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.environ.get("AVALIADOR_WORKDIR", CODE_DIR)
 PASTA_GERADOS = "arquivos_gerados"
 PASTA_LOGS = "logs"
-ARQUIVO_ENTRADA = os.path.join(PASTA_GERADOS, "etapa1_final.csv")
-ARQUIVO_SAIDA = os.path.join(PASTA_GERADOS, "etapa2_final.csv")
-ARQUIVO_LOG_MERGES = os.path.join(PASTA_GERADOS, "etapa2_log_merges.csv")
-ARQUIVO_LOG_TXT = os.path.join(PASTA_LOGS, "etapa2_log.txt")
+ARQUIVO_ENTRADA = os.path.join(PASTA_GERADOS, "integracao_base.csv")
+ARQUIVO_SAIDA = os.path.join(PASTA_GERADOS, "integracao_enriquecida.csv")
+ARQUIVO_LOG_MERGES = os.path.join(PASTA_GERADOS, "integracao_log_merges.csv")
+ARQUIVO_LOG_TXT = os.path.join(PASTA_LOGS, "integracao_enriquecimento_log.txt")
 ARQUIVO_DECISOES_REVISAO = os.path.join(PASTA_GERADOS, "revisao_merges_decisoes.csv")
-ARQUIVO_CONFIGURACAO = "etapa2_config.json"
+ARQUIVO_CONFIGURACAO = "integracao_config.json"
 COLUNA_REVISAO = "id_revisao"
 COLUNA_SCORE_REVISAO = "score_revisao"
 
@@ -1116,7 +1116,7 @@ def main():
     df = ler_final()
     df_validos, df_invalidos = separar_validos_invalidos(df)
 
-    print("\nResumo etapa 2:")
+    print("\nResumo do enriquecimento:")
     print(f"  Total de linhas: {len(df)}")
     print(f"  Registros validos: {len(df_validos)}")
     print(f"  Registros invalidos: {len(df_invalidos)}")
@@ -1141,7 +1141,7 @@ def main():
 
     resumo = df_resumo.iloc[0].to_dict() if not df_resumo.empty else {}
 
-    print("\nResultado etapa 2:")
+    print("\nResultado do enriquecimento:")
     print(
         f"  Invalidos: {len(df_invalidos)} | "
         f"avaliados: {resumo.get('linhas_avaliadas', 0)} | "

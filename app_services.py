@@ -53,28 +53,28 @@ def extrair_porcentagem(texto: str) -> int | None:
     return max(0, min(100, int(percentuais[-1])))
 
 
-class Etapa2ConfigService:
+class IntegracaoConfigService:
     def __init__(self, paths: AppPaths, settings: AppSettings):
         self.paths = paths
         self.settings = settings
 
     def carregar(self) -> dict:
-        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_etapa2)
+        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_integracao)
         if not caminho_config.exists():
-            return self.settings.etapa2_config_padrao.copy()
+            return self.settings.integracao_config_padrao.copy()
 
         try:
             with caminho_config.open("r", encoding="utf-8") as arquivo:
                 config = json.load(arquivo)
         except (json.JSONDecodeError, OSError):
-            return self.settings.etapa2_config_padrao.copy()
+            return self.settings.integracao_config_padrao.copy()
 
-        config_final = self.settings.etapa2_config_padrao.copy()
+        config_final = self.settings.integracao_config_padrao.copy()
         config_final.update(config)
         return config_final
 
     def salvar(self, config: dict):
-        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_etapa2)
+        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_integracao)
         with caminho_config.open("w", encoding="utf-8") as arquivo:
             json.dump(config, arquivo, ensure_ascii=False, indent=2)
 
@@ -104,7 +104,7 @@ class RevisaoService:
 
     def carregar_dados(self) -> pd.DataFrame:
         return pd.read_csv(
-            self.paths.resolver(self.paths.arquivo_etapa2),
+            self.paths.resolver(self.paths.arquivo_enriquecimento),
             sep=";",
             encoding="utf-8-sig",
             dtype=str,

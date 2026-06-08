@@ -12,8 +12,8 @@ BASE_DIR = os.environ.get("AVALIADOR_WORKDIR", CODE_DIR)
 PASTA_DADOS = "."
 PASTA_GERADOS = "arquivos_gerados"
 PASTA_LOGS = "logs"
-ARQUIVO_FINAL = os.path.join(PASTA_GERADOS, "etapa1_final.csv")
-ARQUIVO_LOG_TXT = os.path.join(PASTA_LOGS, "etapa1_log.txt")
+ARQUIVO_FINAL = os.path.join(PASTA_GERADOS, "integracao_base.csv")
+ARQUIVO_LOG_TXT = os.path.join(PASTA_LOGS, "integracao_preparacao_log.txt")
 
 
 def caminho_projeto(caminho: str) -> str:

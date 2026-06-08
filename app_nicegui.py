@@ -7,7 +7,7 @@ from nicegui import ui
 from app_config import COLUNA_MERGE_KEY, AppPaths, AppSettings
 from app_services import (
     EntradaService,
-    Etapa2ConfigService,
+    IntegracaoConfigService,
     PipelineRunner,
     RevisaoService,
     extrair_porcentagem,
@@ -17,12 +17,12 @@ from app_services import (
 from app_state import AppState
 
 
-class PipelineEnriquecimentoApp:
+class IntegracaoEnriquecimentoApp:
     def __init__(self):
         self.paths = AppPaths()
         self.settings = AppSettings()
         self.state = AppState()
-        self.config_service = Etapa2ConfigService(self.paths, self.settings)
+        self.config_service = IntegracaoConfigService(self.paths, self.settings)
         self.entrada_service = EntradaService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
@@ -39,10 +39,10 @@ class PipelineEnriquecimentoApp:
         self._atualizar_status()
         self._atualizar_botoes()
         ui.timer(0.1, self.abrir_login, once=True)
-        ui.run(title="Pipeline de Enriquecimento", reload=False)
+        ui.run(title="Integração e Enriquecimento", reload=False)
 
     def _configurar_tema(self):
-        ui.page_title("Pipeline de Enriquecimento")
+        ui.page_title("Integração e Enriquecimento")
         ui.colors(
             primary="#2563eb",
             secondary="#475569",
@@ -129,8 +129,8 @@ class PipelineEnriquecimentoApp:
     def _montar_layout(self):
         with ui.column().classes("w-full gap-5 p-6"):
             with ui.column().classes("gap-1"):
-                ui.label("Pipeline de Enriquecimento").classes("text-3xl font-bold text-slate-950")
-                ui.label("Execute as etapas, ajuste parâmetros e revise candidatos para o enriquecimento.").classes(
+                ui.label("Integração e Enriquecimento").classes("text-3xl font-bold text-slate-950")
+                ui.label("Execute a preparação, o enriquecimento e a revisão dos dados integrados.").classes(
                     "text-sm text-slate-600"
                 )
 
@@ -147,11 +147,11 @@ class PipelineEnriquecimentoApp:
     def _montar_cards_status(self):
         with ui.row().classes("w-full gap-3"):
             with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
-                ui.label("Etapa 1").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                self.card_etapa1 = ui.label("").classes("text-xl font-semibold text-slate-900")
+                ui.label("Preparação").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                self.card_preparacao = ui.label("").classes("text-xl font-semibold text-slate-900")
             with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
-                ui.label("Etapa 2").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                self.card_etapa2 = ui.label("").classes("text-xl font-semibold text-slate-900")
+                ui.label("Enriquecimento").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                self.card_enriquecimento = ui.label("").classes("text-xl font-semibold text-slate-900")
             with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
                 ui.label("Revisão Humana").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
                 self.card_revisao = ui.label("").classes("text-xl font-semibold text-slate-900")
@@ -168,7 +168,7 @@ class PipelineEnriquecimentoApp:
 
     def _montar_card_configuracoes(self):
         with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
-            ui.label("Configurações da Etapa 2").classes("text-xl font-semibold text-slate-900")
+            ui.label("Configurações do Enriquecimento").classes("text-xl font-semibold text-slate-900")
             config = self.config_service.carregar()
             with ui.grid(columns=5).classes("w-full gap-3"):
                 for chave, rotulo in [
@@ -192,17 +192,17 @@ class PipelineEnriquecimentoApp:
 
     def _montar_card_execucao(self):
         with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
-            ui.label("Executar Etapas").classes("text-xl font-semibold text-slate-900")
+            ui.label("Executar Integração").classes("text-xl font-semibold text-slate-900")
             with ui.row().classes("w-full gap-3"):
-                self.botao_etapa1 = ui.button(
-                    "Iniciar Etapa 1",
-                    on_click=self.abrir_confirmacao_etapa1,
+                self.botao_preparacao = ui.button(
+                    "Iniciar Preparação",
+                    on_click=self.abrir_confirmacao_preparacao,
                 ).props("color=primary unelevated")
-                self.botao_etapa2 = ui.button(
-                    "Iniciar Etapa 2",
-                    on_click=self.abrir_confirmacao_etapa2,
+                self.botao_enriquecimento = ui.button(
+                    "Iniciar Enriquecimento",
+                    on_click=self.abrir_confirmacao_enriquecimento,
                 ).props("color=primary unelevated")
-                self.botao_etapa3 = ui.button("Iniciar Etapa 3", on_click=self.iniciar_revisao).props(
+                self.botao_revisao = ui.button("Iniciar Revisão", on_click=self.iniciar_revisao).props(
                     "color=primary unelevated"
                 )
 
@@ -329,20 +329,20 @@ class PipelineEnriquecimentoApp:
 
     def salvar_config_ui(self):
         self.config_service.salvar(self._config_atual())
-        ui.notify(f"Configuração salva em {self.paths.arquivo_config_etapa2}.")
+        ui.notify(f"Configuração salva em {self.paths.arquivo_config_integracao}.")
 
     def _config_atual(self) -> dict:
         return {chave: int(campo.value) for chave, campo in self.campos_config.items()}
 
-    async def abrir_confirmacao_etapa1(self):
-        await self._confirmar_execucao(1, [self.paths.arquivo_etapa1])
+    async def abrir_confirmacao_preparacao(self):
+        await self._confirmar_execucao(1, [self.paths.arquivo_preparacao])
 
-    async def abrir_confirmacao_etapa2(self):
-        await self._confirmar_execucao(2, [self.paths.arquivo_etapa2, self.paths.arquivo_log_merges])
+    async def abrir_confirmacao_enriquecimento(self):
+        await self._confirmar_execucao(2, [self.paths.arquivo_enriquecimento, self.paths.arquivo_log_merges])
 
-    async def _confirmar_execucao(self, etapa: int, arquivos: list[str]):
+    async def _confirmar_execucao(self, numero_execucao: int, arquivos: list[str]):
         with ui.dialog() as dialog, ui.card().classes("w-[460px] gap-4 rounded-lg"):
-            ui.label(f"Confirmar Etapa {etapa}").classes("text-lg font-semibold text-slate-900")
+            ui.label(f"Confirmar {self._nome_execucao(numero_execucao)}").classes("text-lg font-semibold text-slate-900")
             ui.label("Arquivos que serão sobrescritos:").classes("text-sm text-slate-600")
             for arquivo in arquivos:
                 ui.label(f"- {arquivo}").classes("font-mono text-sm text-slate-700")
@@ -352,15 +352,15 @@ class PipelineEnriquecimentoApp:
 
                 async def confirmar():
                     dialog.close()
-                    script = "etapa1.py" if etapa == 1 else "etapa2.py"
-                    await self.executar_script_com_progresso(etapa, script)
+                    script = "preparacao.py" if numero_execucao == 1 else "enriquecimento.py"
+                    await self.executar_script_com_progresso(numero_execucao, script)
 
                 ui.button("Confirmar e Executar", on_click=confirmar).props("color=primary unelevated")
 
         dialog.open()
 
-    async def executar_script_com_progresso(self, etapa: int, script: str):
-        if etapa == 2:
+    async def executar_script_com_progresso(self, numero_execucao: int, script: str):
+        if numero_execucao == 2:
             self.config_service.salvar(self._config_atual())
 
         self.paths.garantir_pasta(self.paths.pasta_gerados)
@@ -368,10 +368,10 @@ class PipelineEnriquecimentoApp:
         self.state.rodando = True
         self._atualizar_status()
         self._atualizar_botoes()
-        self._abrir_loading(f"Etapa {etapa}: Iniciando...", "")
+        self._abrir_loading(f"{self._nome_execucao(numero_execucao)}: Iniciando...", "")
 
         if not self.paths.resolver_codigo(script).exists():
-            self._atualizar_loading(f"Etapa {etapa}: Erro", f"Script não encontrado: {script}.", 0)
+            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", f"Script não encontrado: {script}.", 0)
             ui.notify(f"Script não encontrado: {script}.")
             self.state.rodando = False
             self.bloqueio.close()
@@ -383,16 +383,16 @@ class PipelineEnriquecimentoApp:
 
         def ao_progredir(linha: str):
             self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
-            self._atualizar_loading(f"Etapa {etapa}: {self.progresso_estimado}%", linha, self.progresso_estimado)
+            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: {self.progresso_estimado}%", linha, self.progresso_estimado)
 
         codigo = await self.pipeline_runner.executar(script, ao_progredir)
 
         if codigo == 0:
-            self._atualizar_loading(f"Etapa {etapa}: Concluída", "Processo finalizado.", 100)
+            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Concluída", "Processo finalizado.", 100)
         else:
-            self._atualizar_loading(f"Etapa {etapa}: Erro", "Processo finalizado com erro.", self.progresso_estimado)
+            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", "Processo finalizado com erro.", self.progresso_estimado)
 
-        ui.notify(f"Etapa {etapa} {'Concluída' if codigo == 0 else 'Terminou com Erro'}.")
+        ui.notify(f"{self._nome_execucao(numero_execucao)} {'concluída' if codigo == 0 else 'terminou com erro'}.")
         self.state.rodando = False
         self.bloqueio.close()
         self._atualizar_status()
@@ -419,8 +419,8 @@ class PipelineEnriquecimentoApp:
         if not self.state.autenticado:
             raise PermissionError("Faça login antes de iniciar a revisão.")
 
-        if not self.paths.existe(self.paths.arquivo_etapa2):
-            raise FileNotFoundError(f"Arquivo não encontrado: {self.paths.arquivo_etapa2}.")
+        if not self.paths.existe(self.paths.arquivo_enriquecimento):
+            raise FileNotFoundError(f"Arquivo não encontrado: {self.paths.arquivo_enriquecimento}.")
 
         df = self.revisao_service.carregar_dados()
         if "id_revisao" not in df.columns or COLUNA_MERGE_KEY not in df.columns:
@@ -437,7 +437,7 @@ class PipelineEnriquecimentoApp:
 
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_etapa2}.")
+        self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_enriquecimento}.")
 
         try:
             df, pares, decisoes, indice_atual = await asyncio.to_thread(self.preparar_revisao)
@@ -506,9 +506,9 @@ class PipelineEnriquecimentoApp:
 
         arquivo_saida = self._definir_arquivo_etapa3_saida()
         arquivo_remover = (
-            self.paths.arquivo_etapa3_parcial
-            if arquivo_saida == self.paths.arquivo_etapa3_final
-            else self.paths.arquivo_etapa3_final
+            self.paths.arquivo_integracao_parcial
+            if arquivo_saida == self.paths.arquivo_integracao_final
+            else self.paths.arquivo_integracao_final
         )
 
         self.state.rodando = True
@@ -527,7 +527,7 @@ class PipelineEnriquecimentoApp:
             ui.notify(f"Erro ao gerar arquivo revisado: {erro}")
             self._atualizar_loading("Geração do Arquivo Revisado: Erro", str(erro), 0)
         else:
-            self.state.arquivo_etapa3_atual = arquivo_saida
+            self.state.arquivo_revisao_atual = arquivo_saida
             self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
             self.bloqueio.close()
             self.download_revisado_label.set_text(f"O arquivo foi salvo em {arquivo_saida}.")
@@ -539,7 +539,7 @@ class PipelineEnriquecimentoApp:
             self.bloqueio.close()
 
     def baixar_arquivo_revisado(self):
-        arquivo = self.state.arquivo_etapa3_atual or self._arquivo_etapa3_existente()
+        arquivo = self.state.arquivo_revisao_atual or self._arquivo_revisao_existente()
         if not arquivo:
             ui.notify("Gere o arquivo revisado antes de baixar.")
             return
@@ -552,9 +552,9 @@ class PipelineEnriquecimentoApp:
 
     def _definir_arquivo_etapa3_saida(self) -> str:
         return (
-            self.paths.arquivo_etapa3_final
+            self.paths.arquivo_integracao_final
             if self._contar_pares_pendentes() == 0
-            else self.paths.arquivo_etapa3_parcial
+            else self.paths.arquivo_integracao_parcial
         )
 
     def _contar_pares_pendentes(self) -> int:
@@ -572,11 +572,11 @@ class PipelineEnriquecimentoApp:
         if caminho.exists():
             caminho.unlink()
 
-    def _arquivo_etapa3_existente(self) -> str:
-        if self.paths.existe(self.paths.arquivo_etapa3_final):
-            return self.paths.arquivo_etapa3_final
-        if self.paths.existe(self.paths.arquivo_etapa3_parcial):
-            return self.paths.arquivo_etapa3_parcial
+    def _arquivo_revisao_existente(self) -> str:
+        if self.paths.existe(self.paths.arquivo_integracao_final):
+            return self.paths.arquivo_integracao_final
+        if self.paths.existe(self.paths.arquivo_integracao_parcial):
+            return self.paths.arquivo_integracao_parcial
         return ""
 
     def _agendar_desenho_revisao(self):
@@ -744,24 +744,27 @@ class PipelineEnriquecimentoApp:
             texto += f" e mais {len(arquivos) - 6}"
         self.arquivos_entrada_label.set_text(f"{len(arquivos)} CSV(s): {texto}")
 
+    def _nome_execucao(self, numero: int) -> str:
+        return "Preparação" if numero == 1 else "Enriquecimento"
+
     def _atualizar_status(self):
-        etapa1_existe = self.paths.existe(self.paths.arquivo_etapa1)
-        etapa2_existe = self.paths.existe(self.paths.arquivo_etapa2)
-        self.card_etapa1.set_text("Pronta" if etapa1_existe else "Pendente")
-        self.card_etapa2.set_text("Pronta" if etapa2_existe else "Pendente")
-        self.card_revisao.set_text("Disponível" if etapa2_existe else "Aguardando")
+        preparacao_existe = self.paths.existe(self.paths.arquivo_preparacao)
+        enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
+        self.card_preparacao.set_text("Pronta" if preparacao_existe else "Pendente")
+        self.card_enriquecimento.set_text("Pronta" if enriquecimento_existe else "Pendente")
+        self.card_revisao.set_text("Disponível" if enriquecimento_existe else "Aguardando")
 
     def _atualizar_botoes(self):
-        etapa1_existe = self.paths.existe(self.paths.arquivo_etapa1)
-        etapa2_existe = self.paths.existe(self.paths.arquivo_etapa2)
+        preparacao_existe = self.paths.existe(self.paths.arquivo_preparacao)
+        enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
         entrada_existe = bool(self.entrada_service.listar_csvs())
         rodando = self.state.rodando
         autenticado = self.state.autenticado
 
         self._definir_habilitado(self.botao_pasta_trabalho, autenticado and not rodando)
-        self._definir_habilitado(self.botao_etapa1, autenticado and not rodando and entrada_existe)
-        self._definir_habilitado(self.botao_etapa2, autenticado and not rodando and etapa1_existe)
-        self._definir_habilitado(self.botao_etapa3, autenticado and not rodando and etapa2_existe)
+        self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
+        self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
+        self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)
         self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
 
     def _definir_habilitado(self, elemento, habilitado: bool):
@@ -772,4 +775,4 @@ class PipelineEnriquecimentoApp:
 
 
 if __name__ in {"__main__", "__mp_main__"}:
-    PipelineEnriquecimentoApp().run()
+    IntegracaoEnriquecimentoApp().run()

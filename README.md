@@ -1,26 +1,25 @@
-# Pipeline de Enriquecimento
-
-Aplicação local para executar um pipeline de enriquecimento de dados em três etapas, com interface web em **NiceGUI**.
-
+# Integração e Enriquecimento
 ## Visão Geral
 
-1. **Etapa 1**: lê os CSVs da pasta de trabalho, separa registros válidos/inválidos e gera a base consolidada inicial.
-2. **Etapa 2**: compara registros, aplica regras de similaridade, realiza merges automáticos e marca candidatos para revisão humana.
-3. **Etapa 3**: permite revisar pares manualmente, registrar aprovação/recusa, observações e usuário responsável, e gerar o arquivo final ou parcial.
+O processo é composto por três atividades operacionais:
+
+1. **Preparação**: lê os CSVs da pasta de trabalho, identifica registros válidos/inválidos e gera a base inicial consolidada.
+2. **Enriquecimento**: compara registros, aplica regras de similaridade, realiza uniões automáticas e marca candidatos para revisão humana.
+3. **Revisão Humana**: permite aprovar ou rejeitar candidatos, registrar observações, identificar o usuário responsável e gerar o arquivo final ou parcial.
 
 ## Estrutura do Código
 
-Na pasta do projeto ficam apenas os scripts e arquivos de configuração:
+Na pasta do projeto ficam os scripts e arquivos de configuração:
 
 ```text
 avaliador/
   app_nicegui.py          # Interface web NiceGUI
   app_config.py           # Caminhos, constantes e configurações padrão
-  app_services.py         # Serviços de entrada, pipeline, configuração e revisão
+  app_services.py         # Serviços de entrada, execução, configuração e revisão
   app_state.py            # Estado da aplicação
-  etapa1.py               # Processamento da etapa 1
-  etapa2.py               # Processamento da etapa 2
-  etapa2_config.json      # Configuração editável da etapa 2
+  preparacao.py           # Script de preparação
+  enriquecimento.py       # Script de enriquecimento
+  integracao_config.json  # Configuração editável do enriquecimento
   requirements.txt        # Dependências Python
   README.md
 ```
@@ -46,7 +45,7 @@ minha_pasta_de_trabalho/
   logs/
 ```
 
-Todo o fluxo de dados acontece nessa pasta de trabalho. A pasta do código não muda.
+Todo o fluxo de dados acontece nessa pasta de trabalho. A pasta do código permanece onde o sistema foi iniciado.
 
 ## Requisitos
 
@@ -122,7 +121,7 @@ $env:APP_SENHA_PADRAO = "minha_senha"
 python app_nicegui.py
 ```
 
-O nome informado no login é usado na auditoria da etapa 3.
+O nome informado no login é usado na auditoria da revisão humana.
 
 ## Como Usar
 
@@ -150,82 +149,82 @@ Ao confirmar, o sistema:
 - cria `arquivos_gerados/`, se necessário;
 - cria `logs/`, se necessário.
 
-### 2. Iniciar Etapa 1
+### 2. Iniciar Preparação
 
 Clique em:
 
 ```text
-Iniciar Etapa 1
+Iniciar Preparação
 ```
 
-A etapa 1 lê os CSVs da pasta de trabalho.
+A preparação lê os CSVs da pasta de trabalho.
 
 Saídas:
 
 ```text
-arquivos_gerados/etapa1_final.csv
-logs/etapa1_log.txt
+arquivos_gerados/integracao_base.csv
+logs/integracao_preparacao_log.txt
 ```
 
-### 3. Configurar Etapa 2
+### 3. Configurar Enriquecimento
 
-Na área **Configurações da Etapa 2**, ajuste os thresholds.
+Na área **Configurações do Enriquecimento**, ajuste os thresholds.
 
-Essas configurações são salvas na pasta do código:
+As configurações são salvas na pasta do código:
 
 ```text
-etapa2_config.json
+integracao_config.json
 ```
 
 Principais campos:
 
-- **Merge Automático (%)**: score mínimo para merge automático.
+- **Merge Automático (%)**: score mínimo para união automática.
 - **Revisão Humana (%)**: score mínimo para encaminhar à revisão.
 - **Nome, Telefone, E-mail, Nascimento, Endereço, Número, Identificador**: thresholds de apoio.
 - **Máx. Pares por Bloco**: limite para evitar blocos muito grandes na comparação.
 
-### 4. Iniciar Etapa 2
+### 4. Iniciar Enriquecimento
 
 Clique em:
 
 ```text
-Iniciar Etapa 2
+Iniciar Enriquecimento
 ```
 
-A etapa 2 lê:
+O enriquecimento lê:
 
 ```text
-arquivos_gerados/etapa1_final.csv
+arquivos_gerados/integracao_base.csv
 ```
 
 E gera:
 
 ```text
-arquivos_gerados/etapa2_final.csv
-arquivos_gerados/etapa2_log_merges.csv
-logs/etapa2_log.txt
+arquivos_gerados/integracao_enriquecida.csv
+arquivos_gerados/integracao_log_merges.csv
+logs/integracao_enriquecimento_log.txt
 ```
 
-Ao rodar a etapa 2, decisões antigas da revisão humana são removidas para evitar reaproveitar decisões de outra base.
+Ao rodar o enriquecimento, decisões antigas da revisão humana são removidas para evitar reaproveitar decisões de outra base.
 
-### 5. Iniciar Etapa 3
+### 5. Iniciar Revisão
 
 Clique em:
 
 ```text
-Iniciar Etapa 3
+Iniciar Revisão
 ```
 
-A etapa 3 carrega:
+A revisão carrega:
 
 ```text
-arquivos_gerados/etapa2_final.csv
+arquivos_gerados/integracao_enriquecida.csv
 ```
 
 Durante a revisão, é possível:
 
-- aprovar merge;
-- rejeitar merge;
+- aprovar união;
+- rejeitar união;
 - escrever observações;
 - pausar e continuar depois;
 - gerar arquivo revisado;
@@ -237,25 +236,25 @@ As decisões são salvas em:
 arquivos_gerados/revisao_merges_decisoes.csv
 ```
 
-## Saídas da Etapa 3
+## Saídas da Revisão
 
 O nome do arquivo depende da situação da revisão:
 
 ```text
-arquivos_gerados/etapa3_final.csv
-arquivos_gerados/etapa3_parcial.csv
+arquivos_gerados/integracao_final.csv
+arquivos_gerados/integracao_parcial.csv
 ```
 
 Se não houver pares pendentes, o sistema gera:
 
 ```text
-etapa3_final.csv
+integracao_final.csv
 ```
 
 Se ainda houver pares pendentes, o sistema gera:
 
 ```text
-etapa3_parcial.csv
+integracao_parcial.csv
 ```
 
 Apenas um desses dois arquivos fica disponível por vez. Ao gerar um, o outro é removido automaticamente.
@@ -277,44 +276,44 @@ No arquivo revisado, a auditoria entra nas colunas:
 - `observacao_revisao`
 - `data_revisao`
 
-Para merges aprovados, a auditoria fica na linha válida enriquecida.
+Para uniões aprovadas, a auditoria fica na linha válida enriquecida.
 
-Para merges rejeitados, a auditoria fica na linha inválida que permanece no arquivo.
+Para uniões rejeitadas, a auditoria fica na linha inválida que permanece no arquivo.
 
-## Executar Etapas Pelo Terminal
+## Executar Pelo Terminal
 
 O fluxo recomendado é pela interface, porque ela define a pasta de trabalho automaticamente para os subprocessos.
 
 Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
 
 ```powershell
-$env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\**********"
-python etapa1.py
-python etapa2.py
+$env:AVALIADOR_WORKDIR = "C:\Users\dalva\Documents\EDM\trabalho_vargem_alta"
+python preparacao.py
+python enriquecimento.py
 ```
 
-Sem `AVALIADOR_WORKDIR`, as etapas usam a própria pasta do código como pasta de trabalho.
+Sem `AVALIADOR_WORKDIR`, os scripts usam a própria pasta do código como pasta de trabalho.
 
 ## Solução de Problemas
 
-### Etapa 1 não encontra arquivos
+### A preparação não encontra arquivos
 
 Confira se os CSVs estão diretamente na raiz da pasta de trabalho escolhida.
 
-### Etapa 2 não inicia
+### O enriquecimento não inicia
 
-Confirme se a etapa 1 gerou:
+Confirme se a preparação gerou:
 
 ```text
-arquivos_gerados/etapa1_final.csv
+arquivos_gerados/integracao_base.csv
 ```
 
-### Etapa 3 não inicia
+### A revisão não inicia
 
-Confirme se a etapa 2 gerou:
+Confirme se o enriquecimento gerou:
 
 ```text
-arquivos_gerados/etapa2_final.csv
+arquivos_gerados/integracao_enriquecida.csv
 ```
 
 ### Os arquivos foram gerados na pasta errada

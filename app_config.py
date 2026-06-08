@@ -9,31 +9,31 @@ class AppPaths:
     work_dir: Path = field(default_factory=lambda: Path(os.environ.get("AVALIADOR_WORKDIR", Path.cwd())).resolve())
     pasta_gerados: str = "arquivos_gerados"
     pasta_logs: str = "logs"
-    arquivo_config_etapa2: str = "etapa2_config.json"
+    arquivo_config_integracao: str = "integracao_config.json"
 
     @property
-    def arquivo_etapa1(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa1_final.csv")
+    def arquivo_preparacao(self) -> str:
+        return os.path.join(self.pasta_gerados, "integracao_base.csv")
 
     @property
-    def arquivo_etapa2(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa2_final.csv")
+    def arquivo_enriquecimento(self) -> str:
+        return os.path.join(self.pasta_gerados, "integracao_enriquecida.csv")
 
     @property
     def arquivo_log_merges(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa2_log_merges.csv")
+        return os.path.join(self.pasta_gerados, "integracao_log_merges.csv")
 
     @property
     def arquivo_decisoes(self) -> str:
         return os.path.join(self.pasta_gerados, "revisao_merges_decisoes.csv")
 
     @property
-    def arquivo_etapa3_final(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa3_final.csv")
+    def arquivo_integracao_final(self) -> str:
+        return os.path.join(self.pasta_gerados, "integracao_final.csv")
 
     @property
-    def arquivo_etapa3_parcial(self) -> str:
-        return os.path.join(self.pasta_gerados, "etapa3_parcial.csv")
+    def arquivo_integracao_parcial(self) -> str:
+        return os.path.join(self.pasta_gerados, "integracao_parcial.csv")
 
     def resolver(self, caminho: str | os.PathLike) -> Path:
         caminho_path = Path(caminho)
@@ -65,7 +65,7 @@ class AppPaths:
 @dataclass(frozen=True)
 class AppSettings:
     senha_padrao: str = field(default_factory=lambda: os.environ.get("APP_SENHA_PADRAO", "1234"))
-    etapa2_config_padrao: dict = field(
+    integracao_config_padrao: dict = field(
         default_factory=lambda: {
             "threshold_similaridade": 85,
             "threshold_revisar": 80,

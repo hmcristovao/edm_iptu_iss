@@ -13,4 +13,4 @@ class AppState:
     pares: list[dict] = field(default_factory=list)
     decisoes: dict[str, dict] = field(default_factory=dict)
     indice_atual: int = 0
-    arquivo_etapa3_atual: str = ""
+    arquivo_revisao_atual: str = ""
