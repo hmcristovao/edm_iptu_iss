@@ -27,6 +27,7 @@ class IntegracaoEnriquecimentoApp:
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
+        self.saida_execucao_atual = []
 
     def run(self):
         self._configurar_tema()
@@ -109,6 +110,13 @@ class IntegracaoEnriquecimentoApp:
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("Fechar", on_click=self.dialog_download_revisado.close).props("flat")
                 ui.button("Baixar Arquivo", on_click=self.baixar_arquivo_revisado).props("color=primary unelevated")
+
+        self.dialog_resultado_enriquecimento = ui.dialog()
+        with self.dialog_resultado_enriquecimento, ui.card().classes("w-[560px] gap-4 rounded-lg"):
+            ui.label("Resultado do Enriquecimento").classes("text-xl font-semibold text-slate-900")
+            self.resultado_enriquecimento_area = ui.column().classes("w-full gap-2")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Fechar", on_click=self.dialog_resultado_enriquecimento.close).props("flat")
 
         self.bloqueio = ui.dialog().props("persistent")
         with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
@@ -303,12 +311,15 @@ class IntegracaoEnriquecimentoApp:
             return
 
         self.progresso_estimado = 0
+        self.saida_execucao_atual = []
 
         def ao_progredir(linha: str):
+            self.saida_execucao_atual.append(linha)
             self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: {self.progresso_estimado}%", linha, self.progresso_estimado)
 
         codigo = await self.pipeline_runner.executar(script, ao_progredir)
+        mostrar_resultado_enriquecimento = codigo == 0 and numero_execucao == 2
 
         if codigo == 0:
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Concluída", "Processo finalizado.", 100)
@@ -320,12 +331,80 @@ class IntegracaoEnriquecimentoApp:
         self.bloqueio.close()
         self._atualizar_status()
         self._atualizar_botoes()
+        if mostrar_resultado_enriquecimento:
+            self._mostrar_resultado_enriquecimento()
 
     def _calcular_progresso(self, texto: str, progresso_atual: int) -> int:
         percentual = extrair_porcentagem(texto)
         if percentual is None:
             return min(95, progresso_atual + 1)
         return max(progresso_atual, percentual)
+
+    def _mostrar_resultado_enriquecimento(self):
+        resumo = self._extrair_resumo_enriquecimento()
+        self.resultado_enriquecimento_area.clear()
+
+        with self.resultado_enriquecimento_area:
+            if resumo:
+                with ui.grid(columns=2).classes("w-full gap-3"):
+                    for titulo, valor in resumo:
+                        with ui.card().classes("gap-1 rounded-lg border border-slate-200 bg-white shadow-none"):
+                            ui.label(titulo).classes("text-xs font-medium uppercase tracking-wide text-slate-500")
+                            ui.label(valor).classes("text-xl font-semibold text-slate-900")
+            else:
+                ui.label("Não foi possível extrair o resumo estruturado. Últimas mensagens:").classes(
+                    "text-sm text-slate-600"
+                )
+                for linha in self.saida_execucao_atual[-8:]:
+                    if linha.strip():
+                        ui.label(linha).classes("font-mono text-xs text-slate-700")
+
+        self.dialog_resultado_enriquecimento.open()
+
+    def _extrair_resumo_enriquecimento(self) -> list[tuple[str, str]]:
+        linhas = [linha.strip() for linha in self.saida_execucao_atual if linha.strip()]
+        resumo = []
+
+        for linha in reversed(linhas):
+            if "Invalidos:" in linha and "avaliados:" in linha and "juntados:" in linha:
+                resumo.extend(self._extrair_pares_chave_valor(linha))
+                break
+
+        for linha in reversed(linhas):
+            if "Revisao:" in linha or "Revisão:" in linha:
+                resumo.extend(self._extrair_linha_revisao(linha))
+                break
+
+        titulos = {
+            "Invalidos": "Registros inválidos",
+            "avaliados": "Registros avaliados",
+            "juntados": "Mesclagens automáticas",
+            "restantes": "Registros restantes",
+        }
+
+        return [(titulos.get(titulo, titulo), valor) for titulo, valor in resumo]
+
+    def _extrair_pares_chave_valor(self, linha: str) -> list[tuple[str, str]]:
+        partes = [parte.strip() for parte in linha.split("|")]
+        resultado = []
+        for parte in partes:
+            if ":" not in parte:
+                continue
+            chave, valor = parte.split(":", 1)
+            resultado.append((chave.strip(), valor.strip()))
+        return resultado
+
+    def _extrair_linha_revisao(self, linha: str) -> list[tuple[str, str]]:
+        texto = linha.split(":", 1)[-1].strip()
+        partes = [parte.strip() for parte in texto.split("|")]
+        resultado = []
+
+        if partes:
+            resultado.append(("Linhas marcadas para revisão", partes[0].replace("linhas marcadas", "").strip()))
+        if len(partes) > 1:
+            resultado.append(("Grupos de revisão", partes[1].replace("grupos", "").strip()))
+
+        return resultado
 
     def _abrir_loading(self, titulo: str, linha: str):
         self.progresso_barra.value = 0
