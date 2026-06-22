@@ -1,6 +1,7 @@
 import asyncio
 import os
 import queue
+import socket
 
 from nicegui import ui
 
@@ -41,7 +42,19 @@ class IntegracaoEnriquecimentoApp:
         self._atualizar_status()
         self._atualizar_botoes()
         ui.timer(0.1, self.abrir_login, once=True)
-        ui.run(title="Integração e Enriquecimento", reload=False)
+        porta = self._encontrar_porta_livre()
+        ui.run(title="Integração e Enriquecimento", reload=False, port=porta)
+
+    def _encontrar_porta_livre(self, inicial: int = 8080) -> int:
+        for porta in range(inicial, inicial + 20):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                try:
+                    sock.bind(("0.0.0.0", porta))
+                except OSError:
+                    continue
+                return porta
+
+        return inicial
 
     def _configurar_tema(self):
         ui.page_title("Integração e Enriquecimento")
@@ -127,6 +140,24 @@ class IntegracaoEnriquecimentoApp:
             self.progresso_texto = ui.label("Aguardando...")
             self.progresso_barra = ui.linear_progress(value=0).props("instant-feedback").classes("w-full")
             self.progresso_linha = ui.label("").classes("text-sm text-slate-600")
+
+        self.dialog_logs_processamento = ui.dialog().props("persistent")
+        with self.dialog_logs_processamento, ui.card().classes("w-[760px] max-w-[92vw] gap-4 rounded-lg"):
+            self.logs_processamento_titulo = ui.label("Processamento dos Arquivos Originais").classes(
+                "text-lg font-semibold text-slate-900"
+            )
+            self.logs_processamento_status = ui.label("Aguardando...").classes("text-sm text-slate-600")
+            with ui.scroll_area().classes(
+                "h-[420px] w-full rounded border border-slate-200 bg-slate-950 p-3"
+            ):
+                self.logs_processamento_texto = ui.label("").classes(
+                    "whitespace-pre-wrap font-mono text-xs leading-relaxed text-slate-100"
+                )
+            with ui.row().classes("w-full justify-end"):
+                self.botao_fechar_logs_processamento = ui.button(
+                    "Fechar",
+                    on_click=self.dialog_logs_processamento.close,
+                ).props("flat")
 
     def _montar_layout(self):
         with ui.column().classes("w-full gap-5 p-6"):
@@ -318,16 +349,10 @@ class IntegracaoEnriquecimentoApp:
         chave = texto_valor(self.chave_legado_input.value)
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading("Processamento dos Arquivos Originais: Iniciando...", "")
-        self.progresso_estimado = 0
+        self._abrir_logs_processamento()
 
         def ao_progredir(linha: str):
-            self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
-            self._atualizar_loading(
-                f"Processamento dos Arquivos Originais: {self.progresso_estimado}%",
-                linha,
-                self.progresso_estimado,
-            )
+            self._adicionar_log_processamento(linha)
 
         fila_progresso = queue.Queue()
 
@@ -350,7 +375,8 @@ class IntegracaoEnriquecimentoApp:
             resumo = await tarefa
             self._drenar_progresso(fila_progresso, ao_progredir)
         except Exception as erro:
-            self._atualizar_loading("Processamento dos Arquivos Originais: Erro", str(erro), self.progresso_estimado)
+            self._adicionar_log_processamento(f"Erro: {erro}")
+            self._finalizar_logs_processamento("Processamento dos Arquivos Originais: Erro")
             ui.notify(f"Erro no processamento dos arquivos originais: {erro}")
         else:
             texto = (
@@ -358,11 +384,11 @@ class IntegracaoEnriquecimentoApp:
                 f"{len(resumo['erros'])} erro(s). Saída: {resumo['saida']}."
             )
             self.processamento_legado_status.set_text(texto)
-            self._atualizar_loading("Processamento dos Arquivos Originais: Concluído", texto, 100)
+            self._adicionar_log_processamento(texto)
+            self._finalizar_logs_processamento("Processamento dos Arquivos Originais: Concluido")
             ui.notify("Processamento dos arquivos originais concluído.")
         finally:
             self.state.rodando = False
-            self.bloqueio.close()
             self._atualizar_status_entrada()
             self._atualizar_status()
             self._atualizar_botoes()
@@ -526,6 +552,28 @@ class IntegracaoEnriquecimentoApp:
         self.progresso_barra.value = max(0, min(100, percentual))
         self.progresso_texto.set_text(titulo)
         self.progresso_linha.set_text(linha[-220:] if linha else "Processando...")
+
+    def _abrir_logs_processamento(self):
+        self.saida_execucao_atual = []
+        self.logs_processamento_titulo.set_text("Processamento dos Arquivos Originais")
+        self.logs_processamento_status.set_text("Executando...")
+        self.logs_processamento_texto.set_text("Iniciando processamento...")
+        self.botao_fechar_logs_processamento.disable()
+        self.dialog_logs_processamento.open()
+
+    def _adicionar_log_processamento(self, linha: str):
+        texto = linha.strip()
+        if not texto:
+            return
+
+        self.saida_execucao_atual.append(texto)
+        self.logs_processamento_texto.set_text("\n".join(self.saida_execucao_atual[-400:]))
+        self.logs_processamento_status.set_text(texto[-180:])
+
+    def _finalizar_logs_processamento(self, titulo: str):
+        self.logs_processamento_titulo.set_text(titulo)
+        self.logs_processamento_status.set_text("Execucao finalizada.")
+        self.botao_fechar_logs_processamento.enable()
 
     def preparar_revisao(self):
         if not self.state.autenticado:

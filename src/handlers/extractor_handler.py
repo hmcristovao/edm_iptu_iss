@@ -6,10 +6,6 @@ import re
 import glob
 import os
 
-from colorlog import exception
-from numpy.f2py.auxfuncs import throw_error
-from pyparsing import Empty
-
 from src.Domain import Parameters
 from src.Domain.Package import Package
 from src.errors.extract_error import NotFoundExtensionError, ExtractError, NotFoundPathError, UnknownExtensioError

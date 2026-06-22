@@ -3,7 +3,6 @@ pandas
 recordlinkage
 tqdm
 beautifulsoup4
-colorlog
 html5lib
 lxml
 openpyxl

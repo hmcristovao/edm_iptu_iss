@@ -138,21 +138,20 @@ class ProcessamentoLegadoService:
         pseudo.set_next(exporter)
 
         erros = []
-        ao_progredir(f"0% | Iniciando processamento legado: {total} arquivo(s) de parâmetros.")
+        ao_progredir(f"Iniciando processamento legado: {total} arquivo(s) de parâmetros.")
 
         for indice, arquivo in enumerate(arquivos, start=1):
-            percentual = int(((indice - 1) / total) * 100)
-            ao_progredir(f"{percentual}% | Processando {indice}/{total}: {arquivo.name}")
+            ao_progredir(f"Processando {indice}/{total}: {arquivo.name}")
             try:
                 parametros = ParameterReader(arquivo).ler_arquivo()
                 pacote = Package(parametros)
                 extractor.handle(request=pacote)
             except Exception as erro:
                 erros.append(f"{arquivo.name}: {erro}")
-                ao_progredir(f"{percentual}% | Erro em {arquivo.name}: {erro}")
+                ao_progredir(f"Erro em {arquivo.name}: {erro}")
 
         ao_progredir(
-            f"100% | Processamento legado concluído: {exporter.iteracao} CSV(s) exportado(s), "
+            f"Processamento legado concluído: {exporter.iteracao} CSV(s) exportado(s), "
             f"{len(erros)} erro(s)."
         )
 
