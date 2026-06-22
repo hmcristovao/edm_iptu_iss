@@ -1,5 +1,6 @@
 import asyncio
 import os
+import queue
 
 from nicegui import ui
 
@@ -8,6 +9,7 @@ from app_services import (
     EntradaService,
     IntegracaoConfigService,
     PipelineRunner,
+    ProcessamentoLegadoService,
     RevisaoService,
     extrair_porcentagem,
     formatar_score,
@@ -23,6 +25,7 @@ class IntegracaoEnriquecimentoApp:
         self.state = AppState()
         self.config_service = IntegracaoConfigService(self.paths, self.settings)
         self.entrada_service = EntradaService(self.paths)
+        self.processamento_legado_service = ProcessamentoLegadoService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
@@ -139,6 +142,7 @@ class IntegracaoEnriquecimentoApp:
 
             self._montar_cards_status()
             self._montar_card_entrada()
+            self._montar_card_processamento_legado()
             self._montar_card_configuracoes()
             self._montar_card_execucao()
             self.area_revisao = ui.column().classes("w-full gap-4")
@@ -164,6 +168,24 @@ class IntegracaoEnriquecimentoApp:
                 "Selecionar Pasta de Trabalho",
                 on_click=self.abrir_selecao_pasta_trabalho,
             ).props("color=primary unelevated")
+
+    def _montar_card_processamento_legado(self):
+        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
+            ui.label("Processamento dos Arquivos Originais").classes("text-xl font-semibold text-slate-900")
+            ui.label(
+                "Executa os algoritmos antigos: leitura dos parâmetros, extração, padronização, pseudonimização e exportação."
+            ).classes("text-sm text-slate-600")
+            with ui.row().classes("w-full gap-3 items-end"):
+                self.chave_legado_input = ui.input(
+                    "Chave de pseudonimização",
+                    password=True,
+                    password_toggle_button=True,
+                ).props("outlined dense").classes("flex-1")
+                self.botao_processamento_legado = ui.button(
+                    "Processar Arquivos Originais",
+                    on_click=self.abrir_confirmacao_processamento_legado,
+                ).props("color=primary unelevated")
+            self.processamento_legado_status = ui.label("").classes("text-sm text-slate-600")
 
     def _montar_card_configuracoes(self):
         with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
@@ -264,6 +286,94 @@ class IntegracaoEnriquecimentoApp:
 
     def _config_atual(self) -> dict:
         return {chave: int(campo.value) for chave, campo in self.campos_config.items()}
+
+    async def abrir_confirmacao_processamento_legado(self):
+        chave = texto_valor(self.chave_legado_input.value)
+        if len(chave) < 8:
+            ui.notify("Informe uma chave de pseudonimização com pelo menos 8 caracteres.")
+            return
+
+        await self._confirmar_processamento_legado()
+
+    async def _confirmar_processamento_legado(self):
+        with ui.dialog() as dialog, ui.card().classes("w-[500px] gap-4 rounded-lg"):
+            ui.label("Confirmar Processamento dos Arquivos Originais").classes(
+                "text-lg font-semibold text-slate-900"
+            )
+            ui.label("Os CSVs serão gerados na pasta dados_processados da pasta de trabalho.").classes(
+                "text-sm text-slate-600"
+            )
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button("Cancelar", on_click=dialog.close).props("flat")
+
+                async def confirmar():
+                    dialog.close()
+                    await self.executar_processamento_legado()
+
+                ui.button("Confirmar e Executar", on_click=confirmar).props("color=primary unelevated")
+
+        dialog.open()
+
+    async def executar_processamento_legado(self):
+        chave = texto_valor(self.chave_legado_input.value)
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading("Processamento dos Arquivos Originais: Iniciando...", "")
+        self.progresso_estimado = 0
+
+        def ao_progredir(linha: str):
+            self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
+            self._atualizar_loading(
+                f"Processamento dos Arquivos Originais: {self.progresso_estimado}%",
+                linha,
+                self.progresso_estimado,
+            )
+
+        fila_progresso = queue.Queue()
+
+        def registrar_progresso(linha: str):
+            fila_progresso.put(linha)
+
+        tarefa = asyncio.create_task(
+            asyncio.to_thread(
+                self.processamento_legado_service.executar,
+                chave,
+                registrar_progresso,
+            )
+        )
+
+        try:
+            while not tarefa.done():
+                self._drenar_progresso(fila_progresso, ao_progredir)
+                await asyncio.sleep(0.1)
+
+            resumo = await tarefa
+            self._drenar_progresso(fila_progresso, ao_progredir)
+        except Exception as erro:
+            self._atualizar_loading("Processamento dos Arquivos Originais: Erro", str(erro), self.progresso_estimado)
+            ui.notify(f"Erro no processamento dos arquivos originais: {erro}")
+        else:
+            texto = (
+                f"{resumo['parametros']} parâmetro(s), {resumo['csvs_exportados']} CSV(s) exportado(s), "
+                f"{len(resumo['erros'])} erro(s). Saída: {resumo['saida']}."
+            )
+            self.processamento_legado_status.set_text(texto)
+            self._atualizar_loading("Processamento dos Arquivos Originais: Concluído", texto, 100)
+            ui.notify("Processamento dos arquivos originais concluído.")
+        finally:
+            self.state.rodando = False
+            self.bloqueio.close()
+            self._atualizar_status_entrada()
+            self._atualizar_status()
+            self._atualizar_botoes()
+
+    def _drenar_progresso(self, fila_progresso: queue.Queue, ao_progredir):
+        while True:
+            try:
+                linha = fila_progresso.get_nowait()
+            except queue.Empty:
+                break
+            ao_progredir(linha)
 
     async def abrir_confirmacao_preparacao(self):
         await self._confirmar_execucao(1, [self.paths.arquivo_preparacao])
@@ -737,6 +847,10 @@ class IntegracaoEnriquecimentoApp:
     def _atualizar_status_entrada(self):
         self.pasta_trabalho_label.set_text(f"Pasta atual: {self.paths.work_dir}")
         arquivos = self.entrada_service.listar_csvs()
+        parametros = self.processamento_legado_service.listar_parametros()
+        self.processamento_legado_status.set_text(
+            f"{len(parametros)} arquivo(s) parametros_*.txt encontrado(s)."
+        )
         if not arquivos:
             self.arquivos_entrada_label.set_text("Nenhum CSV encontrado na pasta de trabalho.")
             return
@@ -764,6 +878,7 @@ class IntegracaoEnriquecimentoApp:
         autenticado = self.state.autenticado
 
         self._definir_habilitado(self.botao_pasta_trabalho, autenticado and not rodando)
+        self._definir_habilitado(self.botao_processamento_legado, autenticado and not rodando)
         self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)

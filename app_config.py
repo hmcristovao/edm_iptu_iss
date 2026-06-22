@@ -35,6 +35,10 @@ class AppPaths:
     def arquivo_integracao_parcial(self) -> str:
         return os.path.join(self.pasta_gerados, "integracao_parcial.csv")
 
+    @property
+    def pasta_dados_processados(self) -> str:
+        return "dados_processados"
+
     def resolver(self, caminho: str | os.PathLike) -> Path:
         caminho_path = Path(caminho)
         if caminho_path.is_absolute():

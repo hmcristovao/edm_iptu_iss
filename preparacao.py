@@ -9,7 +9,8 @@ import pandas as pd
 
 CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE_DIR = os.environ.get("AVALIADOR_WORKDIR", CODE_DIR)
-PASTA_DADOS = "."
+PASTA_DADOS = os.environ.get("AVALIADOR_INPUT_DIR", "")
+PASTA_DADOS_PROCESSADOS = "dados_processados"
 PASTA_GERADOS = "arquivos_gerados"
 PASTA_LOGS = "logs"
 ARQUIVO_FINAL = os.path.join(PASTA_GERADOS, "integracao_base.csv")
@@ -21,6 +22,23 @@ def caminho_projeto(caminho: str) -> str:
         return caminho
 
     return os.path.join(BASE_DIR, caminho)
+
+
+def escolher_pasta_dados() -> str:
+    if PASTA_DADOS:
+        return PASTA_DADOS
+
+    pasta_processados = caminho_projeto(PASTA_DADOS_PROCESSADOS)
+    if os.path.isdir(pasta_processados):
+        csvs_processados = [
+            arquivo
+            for arquivo in os.listdir(pasta_processados)
+            if arquivo.lower().endswith(".csv")
+        ]
+        if csvs_processados:
+            return PASTA_DADOS_PROCESSADOS
+
+    return "."
 
 
 def garantir_pasta(caminho: str):
@@ -442,7 +460,9 @@ def main():
     garantir_pasta(PASTA_GERADOS)
     print("Iniciando leitura dos dados\n")
 
-    dataframes = ler_csvs(PASTA_DADOS)
+    pasta_dados = escolher_pasta_dados()
+    print(f"Pasta de entrada da preparação: {pasta_dados}")
+    dataframes = ler_csvs(pasta_dados)
     lista_validos, lista_invalidos = preparar_bases(dataframes)
 
     print(f"\nBases validas para merge: {len(lista_validos)}")

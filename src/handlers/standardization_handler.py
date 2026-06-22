@@ -1,0 +1,94 @@
+import logging
+
+from src.Domain.Package import Package
+from src.handlers.Handler import AbstractHandler
+from src.handlers.ultis.MultivariablesHander import MultivariablesHanderBuilder
+
+
+class StandardizationHandler(AbstractHandler):
+    def __init__(self):
+        super().__init__()
+        self.logger = logging.getLogger(self.__class__.__name__)
+    def _renomear_colunas_mapeadas(self, df, lista_mapeamento, sufix):
+        self.logger.warning(df.columns)
+        for item in lista_mapeamento:
+            for nome_amigavel, colunas_tecnicas in item.items():
+
+                # 1. Caso Simples: Um único item na lista (Renomeação Direta)
+                if len(colunas_tecnicas) == 1:
+                    col_destino = f"{colunas_tecnicas[0]}{sufix[0]}"
+                    if nome_amigavel in df.columns:
+                        df.rename(columns={nome_amigavel:  col_destino  }, inplace=True)
+                        self.logger.info(f"Sucesso: {nome_amigavel} renomeado para {col_destino}")
+                    else:
+                        self.logger.warning(f"Alerta: Coluna original '{nome_amigavel}' não encontrada.")
+
+                # 2. Caso Complexo: Múltiplos itens (Regras de Negócio: CPF, CNPJ, etc.)
+                elif len(colunas_tecnicas) > 1:
+                    if df.columns.empty:
+                        print("DataFrame não possui colunas")
+                    if nome_amigavel not in df.columns:
+                        self.logger.info(f"Pulo: Coluna '{nome_amigavel}' ausente. Não foi possível criar {colunas_tecnicas}.")
+                        continue
+
+
+                    # Limpeza base: remove caracteres não numéricos uma única vez
+                    serie_limpa = df[nome_amigavel].astype(str).str.replace(r"\D", "", regex=True)
+
+                    for col_alvo in colunas_tecnicas:
+                        MultivariablesHanderBuilder().build(df, nome_amigavel,f"{col_alvo}{sufix[0]}")
+
+                    # Remove a coluna original após processar as regras de documentos
+                    if ("CPF" in str.upper(nome_amigavel) )or ("CNPJ" in str.upper(nome_amigavel)):
+                        self.logger.warning(f"DELETADO: '{nome_amigavel}' do dataset")
+                        df.drop(columns=[nome_amigavel], inplace=True)
+
+                else:
+                    self.logger.error(f"Erro: A chave '{nome_amigavel}' está vazia no mapeamento.")
+
+        return df
+    @staticmethod
+    def validarCpf(cpf: str) -> bool:
+        cpf = ''.join(filter(str.isdigit, str(cpf)))
+
+        if len(cpf) != 11:
+            return False
+        if cpf == cpf[0] * 11:
+            return False
+
+        soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
+        d1 = (soma * 10) % 11
+        d1 = 0 if d1 == 10 else d1
+
+        soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
+        d2 = (soma * 10) % 11
+        d2 = 0 if d2 == 10 else d2
+
+        return cpf[-2:] == f"{d1}{d2}"
+
+    @staticmethod
+    def validarCnpj(cnpj: str) -> bool:
+        cnpj = ''.join(filter(str.isdigit, str(cnpj)))
+
+        if len(cnpj) != 14:
+            return False
+        if cnpj == cnpj[0] * 14:
+            return False
+
+        pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+        pesos2 = [6] + pesos1
+
+        soma = sum(int(cnpj[i]) * pesos1[i] for i in range(12))
+        d1 = 11 - (soma % 11)
+        d1 = 0 if d1 >= 10 else d1
+
+        soma = sum(int(cnpj[i]) * pesos2[i] for i in range(13))
+        d2 = 11 - (soma % 11)
+        d2 = 0 if d2 >= 10 else d2
+
+        return cnpj[-2:] == f"{d1}{d2}"
+
+    def handle(self, request: Package) -> Package:
+        request =Package(request.parameters, self._renomear_colunas_mapeadas(request.datas,request.parameters.variaveis, request.parameters.sufixo))
+
+        return super().handle(request)
