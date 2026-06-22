@@ -1,4 +1,4 @@
-from src.Domain.Parameters import Parameters
+from src.moduloI.Domain.Parameters import Parameters
 import pandas as pd
 
 class Package:

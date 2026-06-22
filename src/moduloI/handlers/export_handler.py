@@ -1,8 +1,8 @@
 import logging
 import pathlib
 
-from src.Domain.Package import Package
-from src.handlers.Handler import AbstractHandler
+from src.moduloI.Domain.Package import Package
+from src.moduloI.handlers.Handler import AbstractHandler
 
 
 class ExportHandler(AbstractHandler):

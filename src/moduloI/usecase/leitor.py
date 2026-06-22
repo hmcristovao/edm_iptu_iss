@@ -1,7 +1,7 @@
 from pathlib import Path
 import os
 from dotenv import load_dotenv
-from src.Domain.Parameters import Parameters
+from src.moduloI.Domain.Parameters import Parameters
 
 load_dotenv()
 

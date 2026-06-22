@@ -3,7 +3,7 @@ import base64
 import hashlib
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
-from src.handlers.adapters.anomizador.IAnomizador import AnomizadorAdapter
+from src.moduloI.handlers.adapters.anomizador.IAnomizador import AnomizadorAdapter
 
 
 class AnonimizadorReversivel(AnomizadorAdapter):

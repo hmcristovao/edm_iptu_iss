@@ -4,8 +4,8 @@ from typing import Any, Optional
 
 import pandas as pd
 
-from src.Domain.Package import Package
-from src.Domain.Parameters import Parameters
+from src.moduloI.Domain.Package import Package
+from src.moduloI.Domain.Parameters import Parameters
 
 
 class Handler(ABC):

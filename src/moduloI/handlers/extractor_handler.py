@@ -6,10 +6,10 @@ import re
 import glob
 import os
 
-from src.Domain import Parameters
-from src.Domain.Package import Package
-from src.errors.extract_error import NotFoundExtensionError, ExtractError, NotFoundPathError, UnknownExtensioError
-from src.handlers.Handler import AbstractHandler
+from src.moduloI.Domain import Parameters
+from src.moduloI.Domain.Package import Package
+from src.moduloI.errors.extract_error import NotFoundExtensionError, ExtractError, NotFoundPathError, UnknownExtensioError
+from src.moduloI.handlers.Handler import AbstractHandler
 
 
 class ExtractorHandler(AbstractHandler):

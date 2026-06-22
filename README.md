@@ -9,19 +9,18 @@ O processo é composto por três atividades operacionais:
 
 ## Estrutura do Código
 
-Na pasta do projeto ficam os scripts e arquivos de configuração:
+Na pasta do projeto fica apenas o inicializador da aplicação. O código foi separado por módulos:
 
 ```text
 avaliador/
-  app_nicegui.py          # Interface web NiceGUI
-  app_config.py           # Caminhos, constantes e configurações padrão
-  app_services.py         # Serviços de entrada, execução, configuração e revisão
-  app_state.py            # Estado da aplicação
-  preparacao.py           # Script de preparação
-  enriquecimento.py       # Script de enriquecimento
-  integracao_config.json  # Configuração editável do enriquecimento
+  app_nicegui.py          # Inicializador da aplicação
   requirements.txt        # Dependências Python
   README.md
+  src/
+    moduloI/              # Leitura, padronização e pseudonimização das bases originais
+    moduloII/             # Integração, enriquecimento e configuração
+    moduloIII/            # Reservado para evoluções futuras
+    views/                # Interface gráfica NiceGUI e serviços de tela
 ```
 
 ## Pasta de Trabalho
@@ -59,6 +58,14 @@ nicegui
 pandas
 recordlinkage
 tqdm
+beautifulsoup4
+html5lib
+lxml
+openpyxl
+pycryptodome
+pyparsing
+python-dotenv
+xlrd
 ```
 
 ## Instalação
@@ -172,7 +179,7 @@ Na área **Configurações do Enriquecimento**, ajuste os thresholds.
 As configurações são salvas na pasta do código:
 
 ```text
-integracao_config.json
+src/moduloII/integracao_config.json
 ```
 
 Principais campos:
@@ -287,8 +294,8 @@ Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
 
 ```powershell
 $env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\pasta"
-python preparacao.py
-python enriquecimento.py
+python src\moduloII\preparacao.py
+python src\moduloII\enriquecimento.py
 ```
 
 Sem `AVALIADOR_WORKDIR`, os scripts usam a própria pasta do código como pasta de trabalho.

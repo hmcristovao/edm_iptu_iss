@@ -2,8 +2,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
-from src.Domain.Package import Package
-from src.Domain.Parameters import Parameters
+from src.moduloI.Domain.Package import Package
+from src.moduloI.Domain.Parameters import Parameters
 
 
 class Handler(ABC):

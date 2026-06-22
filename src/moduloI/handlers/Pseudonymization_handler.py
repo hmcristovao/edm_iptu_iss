@@ -1,8 +1,8 @@
 import logging
 import pandas as pd
-from src.Domain.Package import Package
-from src.handlers.Handler import AbstractHandler
-from src.handlers.adapters.anomizador.IAnomizador import AnomizadorAdapter
+from src.moduloI.Domain.Package import Package
+from src.moduloI.handlers.Handler import AbstractHandler
+from src.moduloI.handlers.adapters.anomizador.IAnomizador import AnomizadorAdapter
 
 
 class PseudonymizationHandler(AbstractHandler):

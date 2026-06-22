@@ -5,12 +5,11 @@ import re
 import subprocess
 import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Callable
 
 import pandas as pd
 
-from app_config import (
+from src.moduloII.app_config import (
     COLUNA_DATA_REVISAO,
     COLUNA_DECISAO_REVISAO,
     COLUNA_MERGE_KEY,
@@ -99,68 +98,6 @@ class EntradaService:
 
     def pasta_valida(self) -> bool:
         return self.paths.work_dir.is_dir()
-
-
-class ProcessamentoLegadoService:
-    def __init__(self, paths: AppPaths):
-        self.paths = paths
-
-    def listar_parametros(self) -> list[Path]:
-        if not self.paths.work_dir.is_dir():
-            return []
-
-        return sorted(self.paths.work_dir.rglob("parametros_*.txt"))
-
-    def executar(self, chave: str, ao_progredir: Callable[[str], None]) -> dict:
-        from src.Domain.Package import Package
-        from src.handlers.Pseudonymization_handler import PseudonymizationHandler
-        from src.handlers.adapters.anomizador.anonimizador_reversivel_adaptado import AnonimizadorReversivel
-        from src.handlers.export_handler import ExportHandler
-        from src.handlers.extractor_handler import ExtractorHandler
-        from src.handlers.standardization_handler import StandardizationHandler
-        from src.usecase.leitor import ParameterReader
-
-        arquivos = self.listar_parametros()
-        total = len(arquivos)
-        if total == 0:
-            raise FileNotFoundError("Nenhum arquivo parametros_*.txt foi encontrado na pasta de trabalho.")
-
-        os.environ["key"] = chave
-        os.environ["DATA_PATH"] = str(self.paths.work_dir / "_entrada")
-
-        extractor = ExtractorHandler()
-        standardizer = StandardizationHandler()
-        pseudo = PseudonymizationHandler(AnonimizadorReversivel())
-        exporter = ExportHandler()
-
-        extractor.set_next(standardizer)
-        standardizer.set_next(pseudo)
-        pseudo.set_next(exporter)
-
-        erros = []
-        ao_progredir(f"Iniciando processamento legado: {total} arquivo(s) de parâmetros.")
-
-        for indice, arquivo in enumerate(arquivos, start=1):
-            ao_progredir(f"Processando {indice}/{total}: {arquivo.name}")
-            try:
-                parametros = ParameterReader(arquivo).ler_arquivo()
-                pacote = Package(parametros)
-                extractor.handle(request=pacote)
-            except Exception as erro:
-                erros.append(f"{arquivo.name}: {erro}")
-                ao_progredir(f"Erro em {arquivo.name}: {erro}")
-
-        ao_progredir(
-            f"Processamento legado concluído: {exporter.iteracao} CSV(s) exportado(s), "
-            f"{len(erros)} erro(s)."
-        )
-
-        return {
-            "parametros": total,
-            "csvs_exportados": exporter.iteracao,
-            "erros": erros,
-            "saida": self.paths.pasta_dados_processados,
-        }
 
 
 class RevisaoService:
