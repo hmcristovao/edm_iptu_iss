@@ -286,7 +286,7 @@ O fluxo recomendado é pela interface, porque ela define a pasta de trabalho aut
 Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
 
 ```powershell
-$env:AVALIADOR_WORKDIR = "C:\Users\dalva\Documents\EDM\trabalho_vargem_alta"
+$env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\pasta"
 python preparacao.py
 python enriquecimento.py
 ```
