@@ -36,6 +36,10 @@ class AppPaths:
         return os.path.join(self.pasta_gerados, "integracao_parcial.csv")
 
     @property
+    def arquivo_integracao_reidentificada(self) -> str:
+        return os.path.join(self.pasta_gerados, "integracao_reidentificada.csv")
+
+    @property
     def pasta_dados_processados(self) -> str:
         return "dados_processados"
 

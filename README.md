@@ -1,11 +1,12 @@
 # Integração e Enriquecimento
 ## Visão Geral
 
-O processo é composto por três atividades operacionais:
+O processo é composto por quatro atividades operacionais:
 
 1. **Preparação**: lê os CSVs da pasta de trabalho, identifica registros válidos/inválidos e gera a base inicial consolidada.
 2. **Enriquecimento**: compara registros, aplica regras de similaridade, realiza uniões automáticas e marca candidatos para revisão humana.
 3. **Revisão Humana**: permite aprovar ou rejeitar candidatos, registrar observações, identificar o usuário responsável e gerar o arquivo final ou parcial.
+4. **Reidentificação**: usa a chave de pseudonimização para reassociar pseudônimos aos CPFs originais em uma cópia da base final.
 
 ## Estrutura do Código
 
@@ -19,7 +20,7 @@ avaliador/
   src/
     moduloI/              # Leitura, padronização e pseudonimização das bases originais
     moduloII/             # Integração, enriquecimento e configuração
-    moduloIII/            # Reservado para evoluções futuras
+    moduloIII/            # Reidentificação dos pseudônimos
     views/                # Interface gráfica NiceGUI e serviços de tela
 ```
 
@@ -296,6 +297,8 @@ Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
 $env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\pasta"
 python src\moduloII\preparacao.py
 python src\moduloII\enriquecimento.py
+$env:APP_CHAVE_PSEUDONIMIZACAO = "minha_chave"
+python src\moduloIII\reassociacao.py
 ```
 
 Sem `AVALIADOR_WORKDIR`, os scripts usam a própria pasta do código como pasta de trabalho.

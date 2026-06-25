@@ -16,6 +16,7 @@ from src.moduloII.services import (
     formatar_score,
     texto_valor,
 )
+from src.moduloIII.reassociacao import ReidentificacaoService
 from src.views.app_state import AppState
 
 
@@ -28,6 +29,7 @@ class IntegracaoEnriquecimentoApp:
         self.entrada_service = EntradaService(self.paths)
         self.processamento_legado_service = ProcessamentoLegadoService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
+        self.reidentificacao_service = ReidentificacaoService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
@@ -257,7 +259,10 @@ class IntegracaoEnriquecimentoApp:
                 self.botao_revisao = ui.button("Iniciar Revisão", on_click=self.iniciar_revisao).props(
                     "color=primary unelevated"
                 )
-
+                self.botao_reidentificacao = ui.button(
+                    "Reidentificar Base",
+                    on_click=self.reidentificar_base,
+                ).props("color=primary unelevated")
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
         senha = texto_valor(self.senha_input.value)
@@ -710,6 +715,47 @@ class IntegracaoEnriquecimentoApp:
             return
         ui.download(str(caminho), filename=caminho.name)
 
+    async def reidentificar_base(self):
+        if self.state.rodando:
+            return
+
+        chave = texto_valor(self.chave_legado_input.value)
+        if len(chave) < 8:
+            ui.notify("Informe a chave de pseudonimização usada no processamento original.")
+            return
+
+        arquivo_entrada = self._arquivo_revisao_existente()
+        if not arquivo_entrada:
+            ui.notify("Gere o arquivo final ou parcial antes de reidentificar a base.")
+            return
+
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading("Reidentificando Base...", f"Lendo {arquivo_entrada}.")
+
+        try:
+            resultado = await asyncio.to_thread(
+                self.reidentificacao_service.reidentificar,
+                chave,
+                arquivo_entrada,
+            )
+        except Exception as erro:
+            ui.notify(f"Erro ao reidentificar a base: {erro}")
+            self._atualizar_loading("Reidentificação: Erro", str(erro), 0)
+        else:
+            mensagem = (
+                f"{resultado.valores_reidentificados} valor(es) reidentificado(s). "
+                f"Arquivo salvo em {resultado.saida}."
+            )
+            self._atualizar_loading("Reidentificação: 100%", mensagem, 100)
+            ui.notify(mensagem)
+            caminho = self.paths.resolver(resultado.saida)
+            ui.download(str(caminho), filename=caminho.name)
+        finally:
+            self.state.rodando = False
+            self.bloqueio.close()
+            self._atualizar_botoes()
+
     def _definir_arquivo_etapa3_saida(self) -> str:
         return (
             self.paths.arquivo_integracao_final
@@ -930,6 +976,10 @@ class IntegracaoEnriquecimentoApp:
         self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)
+        self._definir_habilitado(
+            self.botao_reidentificacao,
+            autenticado and not rodando and bool(self._arquivo_revisao_existente()),
+        )
         self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
 
     def _definir_habilitado(self, elemento, habilitado: bool):
