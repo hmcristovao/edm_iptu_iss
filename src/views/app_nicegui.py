@@ -17,6 +17,7 @@ from src.moduloII.services import (
     texto_valor,
 )
 from src.moduloIII.reassociacao import ReidentificacaoService
+from src.moduloIV.preenchimento_imobiliario import PreenchimentoImobiliarioService
 from src.views.app_state import AppState
 
 
@@ -30,6 +31,7 @@ class IntegracaoEnriquecimentoApp:
         self.processamento_legado_service = ProcessamentoLegadoService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
         self.reidentificacao_service = ReidentificacaoService(self.paths)
+        self.preenchimento_imobiliario_service = PreenchimentoImobiliarioService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
@@ -135,6 +137,13 @@ class IntegracaoEnriquecimentoApp:
             self.resultado_enriquecimento_area = ui.column().classes("w-full gap-2")
             with ui.row().classes("w-full justify-end"):
                 ui.button("Fechar", on_click=self.dialog_resultado_enriquecimento.close).props("flat")
+
+        self.dialog_resultado_preenchimento = ui.dialog()
+        with self.dialog_resultado_preenchimento, ui.card().classes("w-[560px] gap-4 rounded-lg"):
+            ui.label("Resultado do Preenchimento Imobiliário").classes("text-xl font-semibold text-slate-900")
+            self.resultado_preenchimento_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Fechar", on_click=self.dialog_resultado_preenchimento.close).props("flat")
 
         self.bloqueio = ui.dialog().props("persistent")
         with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
@@ -262,6 +271,10 @@ class IntegracaoEnriquecimentoApp:
                 self.botao_reidentificacao = ui.button(
                     "Reidentificar Base",
                     on_click=self.reidentificar_base,
+                ).props("color=primary unelevated")
+                self.botao_preencher_imobiliario = ui.button(
+                    "Preencher Imobiliário",
+                    on_click=self.preencher_cadastro_imobiliario,
                 ).props("color=primary unelevated")
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
@@ -756,6 +769,49 @@ class IntegracaoEnriquecimentoApp:
             self.bloqueio.close()
             self._atualizar_botoes()
 
+    async def preencher_cadastro_imobiliario(self):
+        if self.state.rodando:
+            return
+
+        chave = texto_valor(self.chave_legado_input.value)
+        if len(chave) < 8:
+            ui.notify("Informe a chave de pseudonimização usada no processamento original.")
+            return
+
+        if not self._arquivo_revisao_existente():
+            ui.notify("Gere o arquivo final ou parcial antes de preencher o cadastro imobiliário.")
+            return
+
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading(
+            "Preenchendo Cadastro Imobiliário...",
+            f"Lendo {self.paths.pasta_dados_processados}/imobiliario.csv.",
+        )
+
+        try:
+            resultado = await asyncio.to_thread(self.preenchimento_imobiliario_service.preencher, chave)
+        except Exception as erro:
+            ui.notify(f"Erro ao preencher o cadastro imobiliário: {erro}")
+            self._atualizar_loading("Preenchimento Imobiliário: Erro", str(erro), 0)
+        else:
+            mensagem = (
+                f"{resultado.linhas_cruzadas} linha(s) cruzada(s), "
+                f"{resultado.celulas_preenchidas} célula(s) preenchida(s). "
+                f"Telefone: {resultado.telefones_antes} antes, {resultado.telefones_agora} agora. "
+                f"Email: {resultado.emails_antes} antes, {resultado.emails_agora} agora. "
+                f"Arquivo salvo em {resultado.saida}."
+            )
+            self._atualizar_loading("Preenchimento Imobiliário: 100%", mensagem, 100)
+            self.resultado_preenchimento_label.set_text(mensagem)
+            self.dialog_resultado_preenchimento.open()
+            caminho = self.paths.resolver(resultado.saida)
+            ui.download(str(caminho), filename=caminho.name)
+        finally:
+            self.state.rodando = False
+            self.bloqueio.close()
+            self._atualizar_botoes()
+
     def _definir_arquivo_etapa3_saida(self) -> str:
         return (
             self.paths.arquivo_integracao_final
@@ -978,6 +1034,10 @@ class IntegracaoEnriquecimentoApp:
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)
         self._definir_habilitado(
             self.botao_reidentificacao,
+            autenticado and not rodando and bool(self._arquivo_revisao_existente()),
+        )
+        self._definir_habilitado(
+            self.botao_preencher_imobiliario,
             autenticado and not rodando and bool(self._arquivo_revisao_existente()),
         )
         self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
