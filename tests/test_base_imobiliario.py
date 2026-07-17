@@ -105,12 +105,32 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(self.service._contar_preenchidos(df, COLUNA_CELULAR), 2)
         self.assertEqual(self.service._contar_preenchidos(df, COLUNA_EMAIL), 2)
 
+    def test_calcula_percentual_de_enriquecimento(self):
+        self.assertEqual(self.service._calcular_percentual_enriquecimento(2123, 517), 410.64)
+        self.assertEqual(self.service._calcular_percentual_enriquecimento(144, 221), 65.16)
+        self.assertEqual(self.service._calcular_percentual_enriquecimento(1, 0), 0.0)
+
     def test_protege_cpfcnpj_como_texto_na_saida(self):
         df = pd.DataFrame({COLUNA_DOCUMENTO: ["00147611733", "04252011000110", ""]})
 
         self.service._proteger_documento_saida(df)
 
         self.assertEqual(df[COLUNA_DOCUMENTO].tolist(), ["\t00147611733", "\t04252011000110", ""])
+
+    def test_ordena_registros_validos_antes_dos_invalidos(self):
+        df = pd.DataFrame(
+            {
+                COLUNA_DOCUMENTO: ["invalido1", "cpf", "invalido2", "cnpj"],
+                COLUNA_CPF_VALIDO: ["N", "S", "N", "N"],
+                COLUNA_CNPJ_VALIDO: ["N", "N", "N", "S"],
+                COLUNA_INSCRICAO: ["1", "2", "3", "4"],
+            }
+        )
+
+        resultado = self.service._ordenar_validos_primeiro(df)
+
+        self.assertEqual(resultado[COLUNA_DOCUMENTO].tolist(), ["cpf", "cnpj", "invalido1", "invalido2"])
+        self.assertEqual(resultado[COLUNA_INSCRICAO].tolist(), ["2", "4", "1", "3"])
 
     def test_enriquece_telefones_e_emails_por_cpf_e_cnpj(self):
         imobiliario = pd.DataFrame(
@@ -135,7 +155,7 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
 
         telefones, emails = self.service._enriquecer_contatos(imobiliario, integracao)
 
-        self.assertEqual(telefones, 3)
+        self.assertEqual(telefones, 2)
         self.assertEqual(emails, 2)
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["8133334444", "8132221111"])
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}2"].tolist(), ["8177778888", ""])

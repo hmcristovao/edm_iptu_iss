@@ -833,10 +833,12 @@ class IntegracaoEnriquecimentoApp:
 
             resultado = self._extrair_resultado_modulo_iv()
             mensagem = (
-                f"Celulares preenchidos: {resultado.get('celulares_preenchidos', 0)}\n"
+                f"Telefones preenchidos: {resultado.get('celulares_preenchidos', 0)}\n"
                 f"E-mails preenchidos: {resultado.get('emails_preenchidos', 0)}\n"
-                f"Telefones adicionados pela integração: {resultado.get('telefones_enriquecidos', 0)}\n"
-                f"E-mails adicionados pela integração: {resultado.get('emails_enriquecidos', 0)}"
+                f"Linhas com telefone adicionado pela integração: {resultado.get('telefones_enriquecidos', 0)}\n"
+                f"Aumento por telefone: {self._formatar_percentual(resultado.get('percentual_telefones_enriquecidos', 0))}\n"
+                f"Linhas com e-mail adicionado pela integração: {resultado.get('emails_enriquecidos', 0)}\n"
+                f"Aumento por e-mail: {self._formatar_percentual(resultado.get('percentual_emails_enriquecidos', 0))}"
             )
             self._atualizar_loading("Base Imobiliária: 100%", mensagem, 100)
             if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
@@ -861,6 +863,12 @@ class IntegracaoEnriquecimentoApp:
             if linha.startswith(prefixo):
                 return json.loads(linha[len(prefixo):])
         return {}
+
+    def _formatar_percentual(self, valor) -> str:
+        try:
+            return f"{float(valor):.2f}%".replace(".", ",")
+        except (TypeError, ValueError):
+            return "0,00%"
 
     def _definir_arquivo_etapa3_saida(self) -> str:
         return (

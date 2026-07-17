@@ -39,6 +39,8 @@ class ResultadoBaseImobiliarioModuloIV:
     emails_preenchidos: int
     telefones_enriquecidos: int
     emails_enriquecidos: int
+    percentual_telefones_enriquecidos: float
+    percentual_emails_enriquecidos: float
 
 
 class BaseImobiliarioModuloIVService:
@@ -73,11 +75,20 @@ class BaseImobiliarioModuloIVService:
         df_saida, linhas_removidas = self._remover_duplicados_agregando_inscricoes(df)
         cpfs_reidentificados = self._reidentificar_cpfs(df_saida, anonimizador)
         df_integracao = pd.read_csv(caminho_integracao, sep=";", encoding="utf-8-sig", dtype=str).fillna("")
-        telefones_enriquecidos, emails_enriquecidos = self._enriquecer_contatos(df_saida, df_integracao)
         celulares_preenchidos = self._contar_preenchidos(df_saida, COLUNA_CELULAR)
         emails_preenchidos = self._contar_preenchidos(df_saida, COLUNA_EMAIL)
+        telefones_enriquecidos, emails_enriquecidos = self._enriquecer_contatos(df_saida, df_integracao)
+        percentual_telefones = self._calcular_percentual_enriquecimento(
+            telefones_enriquecidos,
+            celulares_preenchidos,
+        )
+        percentual_emails = self._calcular_percentual_enriquecimento(
+            emails_enriquecidos,
+            emails_preenchidos,
+        )
         self._remover_colunas_saida(df_saida)
         self._proteger_documento_saida(df_saida)
+        df_saida = self._ordenar_validos_primeiro(df_saida)
 
         self.paths.garantir_pasta_arquivo(saida)
         df_saida.to_csv(self.paths.resolver(saida), sep=";", encoding="utf-8-sig", index=False)
@@ -93,6 +104,8 @@ class BaseImobiliarioModuloIVService:
             emails_preenchidos=emails_preenchidos,
             telefones_enriquecidos=telefones_enriquecidos,
             emails_enriquecidos=emails_enriquecidos,
+            percentual_telefones_enriquecidos=percentual_telefones,
+            percentual_emails_enriquecidos=percentual_emails,
         )
 
     def _arquivo_entrada_padrao(self) -> str:
@@ -114,7 +127,9 @@ class BaseImobiliarioModuloIVService:
         self._criar_colunas_enriquecidas(df_imobiliario, PREFIXO_TELEFONE_ENRIQUECIDO, telefones_por_linha)
         self._criar_colunas_enriquecidas(df_imobiliario, PREFIXO_EMAIL_ENRIQUECIDO, emails_por_linha)
 
-        return sum(len(valores) for valores in telefones_por_linha), sum(len(valores) for valores in emails_por_linha)
+        linhas_com_telefone = sum(1 for valores in telefones_por_linha if valores)
+        linhas_com_email = sum(1 for valores in emails_por_linha if valores)
+        return linhas_com_telefone, linhas_com_email
 
     def _mapear_contatos_por_documento(self, df: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
         colunas_documento = self._colunas_documento_integracao(df)
@@ -343,9 +358,28 @@ class BaseImobiliarioModuloIVService:
         valores = df[coluna].fillna("").astype(str).str.strip()
         return int((~valores.str.lower().isin(["", "-", "nan", "none", "null"])).sum())
 
+    def _calcular_percentual_enriquecimento(self, adicionados: int, preenchidos_antes: int) -> float:
+        if preenchidos_antes <= 0:
+            return 0.0
+        return round((adicionados / preenchidos_antes) * 100, 2)
+
     def _remover_colunas_saida(self, df: pd.DataFrame) -> None:
         if COLUNA_ENDERECO in df.columns:
             df.drop(columns=[COLUNA_ENDERECO], inplace=True)
+
+    def _ordenar_validos_primeiro(self, df: pd.DataFrame) -> pd.DataFrame:
+        if COLUNA_CPF_VALIDO not in df.columns or COLUNA_CNPJ_VALIDO not in df.columns:
+            return df
+
+        resultado = df.copy()
+        resultado["_documento_valido_ordem"] = resultado.apply(
+            lambda linha: 0
+            if self._status_valido(linha.get(COLUNA_CPF_VALIDO, "")) or self._status_valido(linha.get(COLUNA_CNPJ_VALIDO, ""))
+            else 1,
+            axis=1,
+        )
+        resultado = resultado.sort_values("_documento_valido_ordem", kind="stable")
+        return resultado.drop(columns=["_documento_valido_ordem"]).reset_index(drop=True)
 
     def _proteger_documento_saida(self, df: pd.DataFrame) -> None:
         if COLUNA_DOCUMENTO not in df.columns:
@@ -370,10 +404,12 @@ def main():
         f"{resultado.linhas_saida} linha(s), "
         f"{resultado.linhas_removidas_duplicadas} duplicata(s) removida(s), "
         f"{resultado.cpfs_reidentificados} CPF(s) reidentificado(s), "
-        f"{resultado.celulares_preenchidos} celular(es) preenchido(s), "
+        f"{resultado.celulares_preenchidos} telefone(s) preenchido(s), "
         f"{resultado.emails_preenchidos} email(s) preenchido(s), "
-        f"{resultado.telefones_enriquecidos} telefone(s) enriquecido(s), "
-        f"{resultado.emails_enriquecidos} email(s) enriquecido(s), "
+        f"{resultado.telefones_enriquecidos} linha(s) com telefone enriquecido, "
+        f"{resultado.percentual_telefones_enriquecidos:.2f}% de aumento por telefone, "
+        f"{resultado.emails_enriquecidos} linha(s) com email enriquecido, "
+        f"{resultado.percentual_emails_enriquecidos:.2f}% de aumento por email, "
         f"saida {resultado.saida}."
     )
     print(f"RESULTADO_MODULO_IV_JSON={json.dumps(asdict(resultado), ensure_ascii=False)}")
