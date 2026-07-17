@@ -31,8 +31,9 @@ class AnonimizadorReversivel(AnomizadorAdapter):
             return ""
 
         try:
-            # Cria um novo vetor de inicialização (IV) aleatório para cada operação
-            cipher = AES.new(self.key, AES.MODE_CBC)
+            # Cria um IV deterministico para pseudonimos estaveis por valor e chave.
+            iv = hashlib.sha256(self.key + text.encode("utf-8")).digest()[:AES.block_size]
+            cipher = AES.new(self.key, AES.MODE_CBC, iv=iv)
 
             # Aplica preenchimento (padding) para alinhar ao tamanho do bloco do AES
             padded_data = pad(text.encode("utf-8"), AES.block_size)
