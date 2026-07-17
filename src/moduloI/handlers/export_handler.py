@@ -30,7 +30,8 @@ class ExportHandler(AbstractHandler):
 
         try:
             if request.datas is not None and not request.datas.empty:
-                request.datas.to_csv(out_csv, index=False, sep=';', encoding='utf-8-sig')
+                dados_exportacao = self._preparar_documentos_como_texto(request.datas)
+                dados_exportacao.to_csv(out_csv, index=False, sep=';', encoding='utf-8-sig')
                 request.exported = True
                 self.iteracao += 1
                 self.logger.info(f"Arquivo gerado com sucesso: {out_csv}")
@@ -43,3 +44,23 @@ class ExportHandler(AbstractHandler):
             raise
 
         return super().handle(request)
+
+    def _preparar_documentos_como_texto(self, df):
+        resultado = df.copy()
+
+        for coluna in resultado.columns:
+            nome = str(coluna).lower()
+            if ("cpf" not in nome and "cnpj" not in nome) or "valid" in nome:
+                continue
+
+            resultado[coluna] = resultado[coluna].apply(self._formatar_como_texto)
+
+        return resultado
+
+    def _formatar_como_texto(self, valor):
+        texto = "" if valor is None else str(valor).strip()
+        if not texto or texto.lower() in {"nan", "none", "null"}:
+            return ""
+        if texto.startswith("\t"):
+            return texto
+        return f"\t{texto}"

@@ -3,7 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import pandas as pd
+
+from src.moduloI.Domain.Package import Package
+from src.moduloI.Domain.Parameters import Parameters
 from src.moduloI.handlers.adapters.anomizador.anonimizador_reversivel_adaptado import AnonimizadorReversivel
+from src.moduloI.handlers.export_handler import ExportHandler
+from src.moduloI.handlers.ultis.MultivariablesHander import MultivariablesHanderBuilder
 from src.moduloI.usecase.leitor import ParameterReader
 
 
@@ -74,6 +80,52 @@ class AnonimizadorReversivelTest(unittest.TestCase):
         self.assertEqual(primeiro, segundo)
         self.assertNotEqual(primeiro, outro)
         self.assertEqual(anonimizador.decrypt(primeiro), "12345678901")
+
+
+class MultivariablesHanderBuilderTest(unittest.TestCase):
+    def test_campo_cpfcnpj_preserva_cnpj_valido(self):
+        df = pd.DataFrame({"documento": ["04.252.011/0001-10", "529.982.247-25", "111"]})
+        builder = MultivariablesHanderBuilder()
+
+        builder.build(df, "documento", "cpfCnpjFonte")
+        builder.build(df, "documento", "cpfCnpjValidoFonte")
+
+        self.assertEqual(df["cpfCnpjFonte"].tolist(), ["04252011000110", "52998224725", ""])
+        self.assertEqual(df["cpfCnpjValidoFonte"].tolist(), ["S", "S", "N"])
+
+
+class ExportHandlerTest(unittest.TestCase):
+    def test_exporta_cpf_e_cnpj_como_texto_no_csv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parametros = Parameters(
+                pasta=tmp,
+                sep=";",
+                footer=0,
+                header=0,
+                formato="csv",
+                saida=tmp,
+                sufixo=["Fonte"],
+                variaveis=[],
+            )
+            dados = pd.DataFrame(
+                {
+                    "cpfFonte": ["00147611733"],
+                    "cnpjFonte": ["04252011000110"],
+                    "cpfCnpjFonte": ["52998224725"],
+                    "cpfValidoFonte": ["S"],
+                    "cnpjValidoFonte": ["S"],
+                    "nomeFonte": ["Empresa"],
+                }
+            )
+
+            ExportHandler().handle(Package(parametros, dados))
+
+            conteudo = (Path(tmp) / "Fonte.csv").read_text(encoding="utf-8-sig")
+
+        self.assertIn("\t00147611733", conteudo)
+        self.assertIn("\t04252011000110", conteudo)
+        self.assertIn("\t52998224725", conteudo)
+        self.assertIn(";S;", conteudo)
 
 
 if __name__ == "__main__":

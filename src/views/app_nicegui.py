@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import queue
 import socket
@@ -17,7 +18,6 @@ from src.moduloII.services import (
     texto_valor,
 )
 from src.moduloIII.reassociacao import ReidentificacaoService
-from src.moduloIV.preenchimento_imobiliario import PreenchimentoImobiliarioService
 from src.views.app_state import AppState
 
 
@@ -31,7 +31,6 @@ class IntegracaoEnriquecimentoApp:
         self.processamento_legado_service = ProcessamentoLegadoService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
         self.reidentificacao_service = ReidentificacaoService(self.paths)
-        self.preenchimento_imobiliario_service = PreenchimentoImobiliarioService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
         self.campos_config = {}
         self.progresso_estimado = 0
@@ -138,12 +137,12 @@ class IntegracaoEnriquecimentoApp:
             with ui.row().classes("w-full justify-end"):
                 ui.button("Fechar", on_click=self.dialog_resultado_enriquecimento.close).props("flat")
 
-        self.dialog_resultado_preenchimento = ui.dialog()
-        with self.dialog_resultado_preenchimento, ui.card().classes("w-[560px] gap-4 rounded-lg"):
-            ui.label("Resultado do Preenchimento Imobiliário").classes("text-xl font-semibold text-slate-900")
-            self.resultado_preenchimento_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
+        self.dialog_resultado_base_imobiliaria = ui.dialog()
+        with self.dialog_resultado_base_imobiliaria, ui.card().classes("w-[560px] gap-4 rounded-lg"):
+            ui.label("Resultado da Base Imobiliaria").classes("text-xl font-semibold text-slate-900")
+            self.resultado_base_imobiliaria_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Fechar", on_click=self.dialog_resultado_preenchimento.close).props("flat")
+                ui.button("Fechar", on_click=self.dialog_resultado_base_imobiliaria.close).props("flat")
 
         self.bloqueio = ui.dialog().props("persistent")
         with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
@@ -272,9 +271,9 @@ class IntegracaoEnriquecimentoApp:
                     "Reidentificar Base",
                     on_click=self.reidentificar_base,
                 ).props("color=primary unelevated")
-                self.botao_preencher_imobiliario = ui.button(
-                    "Preencher Imobiliário",
-                    on_click=self.preencher_cadastro_imobiliario,
+                self.botao_base_imobiliario_modulo_iv = ui.button(
+                    "Gerar Base Imobiliária",
+                    on_click=self.gerar_base_imobiliario_modulo_iv,
                 ).props("color=primary unelevated")
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
@@ -459,7 +458,7 @@ class IntegracaoEnriquecimentoApp:
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", f"Script não encontrado: {script}.", 0)
             ui.notify(f"Script não encontrado: {script}.")
             self.state.rodando = False
-            self.bloqueio.close()
+            self._fechar_bloqueio()
             self._atualizar_status()
             self._atualizar_botoes()
             return
@@ -482,7 +481,7 @@ class IntegracaoEnriquecimentoApp:
 
         ui.notify(f"{self._nome_execucao(numero_execucao)} {'concluída' if codigo == 0 else 'terminou com erro'}.")
         self.state.rodando = False
-        self.bloqueio.close()
+        self._fechar_bloqueio()
         self._atualizar_status()
         self._atualizar_botoes()
         if mostrar_resultado_enriquecimento:
@@ -561,15 +560,35 @@ class IntegracaoEnriquecimentoApp:
         return resultado
 
     def _abrir_loading(self, titulo: str, linha: str):
-        self.progresso_barra.value = 0
-        self.progresso_texto.set_text(titulo)
-        self.progresso_linha.set_text(linha)
-        self.bloqueio.open()
+        if not self._executar_ui(lambda: setattr(self.progresso_barra, "value", 0)):
+            return False
+        if not self._executar_ui(lambda: self.progresso_texto.set_text(titulo)):
+            return False
+        if not self._executar_ui(lambda: self.progresso_linha.set_text(linha)):
+            return False
+        return self._executar_ui(self.bloqueio.open)
 
     def _atualizar_loading(self, titulo: str, linha: str, percentual: int):
-        self.progresso_barra.value = max(0, min(100, percentual))
-        self.progresso_texto.set_text(titulo)
-        self.progresso_linha.set_text(linha[-220:] if linha else "Processando...")
+        if not self._executar_ui(lambda: setattr(self.progresso_barra, "value", max(0, min(100, percentual)))):
+            return False
+        if not self._executar_ui(lambda: self.progresso_texto.set_text(titulo)):
+            return False
+        return self._executar_ui(lambda: self.progresso_linha.set_text(linha[-220:] if linha else "Processando..."))
+
+    def _fechar_bloqueio(self):
+        return self._executar_ui(self.bloqueio.close)
+
+    def _executar_ui(self, acao):
+        try:
+            acao()
+            return True
+        except RuntimeError as erro:
+            texto = str(erro).lower()
+            if "client" in texto and "deleted" in texto:
+                return False
+            if "parent element" in texto and "deleted" in texto:
+                return False
+            raise
 
     def _abrir_logs_processamento(self):
         self.saida_execucao_atual = []
@@ -632,7 +651,7 @@ class IntegracaoEnriquecimentoApp:
             ui.notify(f"Revisão carregada com {len(pares)} pares.")
         finally:
             self.state.rodando = False
-            self.bloqueio.close()
+            self._fechar_bloqueio()
             self._atualizar_status()
             self._atualizar_botoes()
             if self.state.etapa3_ativa:
@@ -707,14 +726,14 @@ class IntegracaoEnriquecimentoApp:
         else:
             self.state.arquivo_revisao_atual = arquivo_saida
             self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
-            self.bloqueio.close()
+            self._fechar_bloqueio()
             self.download_revisado_label.set_text(f"O arquivo foi salvo em {arquivo_saida}.")
             ui.notify(f"Arquivo salvo: {arquivo_saida}.")
             self.dialog_download_revisado.open()
         finally:
             self.state.rodando = False
             self._atualizar_botoes()
-            self.bloqueio.close()
+            self._fechar_bloqueio()
 
     def baixar_arquivo_revisado(self):
         arquivo = self.state.arquivo_revisao_atual or self._arquivo_revisao_existente()
@@ -766,10 +785,10 @@ class IntegracaoEnriquecimentoApp:
             ui.download(str(caminho), filename=caminho.name)
         finally:
             self.state.rodando = False
-            self.bloqueio.close()
+            self._fechar_bloqueio()
             self._atualizar_botoes()
 
-    async def preencher_cadastro_imobiliario(self):
+    async def gerar_base_imobiliario_modulo_iv(self):
         if self.state.rodando:
             return
 
@@ -778,39 +797,70 @@ class IntegracaoEnriquecimentoApp:
             ui.notify("Informe a chave de pseudonimização usada no processamento original.")
             return
 
-        if not self._arquivo_revisao_existente():
-            ui.notify("Gere o arquivo final ou parcial antes de preencher o cadastro imobiliário.")
+        arquivo_entrada = os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv")
+        if not self.paths.existe(arquivo_entrada):
+            ui.notify("Arquivo dados_processados/imobiliario.csv não encontrado na pasta de trabalho.")
+            return
+        if not self.paths.existe(self.paths.arquivo_integracao_reidentificada):
+            ui.notify("Gere a integração reidentificada antes de gerar a base imobiliária.")
             return
 
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading(
-            "Preenchendo Cadastro Imobiliário...",
-            f"Lendo {self.paths.pasta_dados_processados}/imobiliario.csv.",
-        )
+        self._abrir_loading("Gerando Base Imobiliária...", f"Lendo {arquivo_entrada}.")
+
+        self.saida_execucao_atual = []
+        chave_anterior = os.environ.get("key")
+        os.environ["key"] = chave
 
         try:
-            resultado = await asyncio.to_thread(self.preenchimento_imobiliario_service.preencher, chave)
-        except Exception as erro:
-            ui.notify(f"Erro ao preencher o cadastro imobiliário: {erro}")
-            self._atualizar_loading("Preenchimento Imobiliário: Erro", str(erro), 0)
-        else:
-            mensagem = (
-                f"{resultado.linhas_cruzadas} linha(s) cruzada(s), "
-                f"{resultado.celulas_preenchidas} célula(s) preenchida(s). "
-                f"Telefone: {resultado.telefones_antes} antes, {resultado.telefones_agora} agora. "
-                f"Email: {resultado.emails_antes} antes, {resultado.emails_agora} agora. "
-                f"Arquivo salvo em {resultado.saida}."
+            def ao_progredir(linha: str):
+                if not linha.strip():
+                    return
+                self.saida_execucao_atual.append(linha)
+                self._atualizar_loading("Base Imobiliária: Executando...", linha, 50)
+
+            codigo = await self.pipeline_runner.executar(
+                os.path.join("..", "moduloIV", "base_imobiliario.py"),
+                ao_progredir,
             )
-            self._atualizar_loading("Preenchimento Imobiliário: 100%", mensagem, 100)
-            self.resultado_preenchimento_label.set_text(mensagem)
-            self.dialog_resultado_preenchimento.open()
-            caminho = self.paths.resolver(resultado.saida)
-            ui.download(str(caminho), filename=caminho.name)
+
+            if codigo != 0:
+                ultimas_linhas = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
+                self._executar_ui(lambda: ui.notify("Erro ao gerar a base imobiliária."))
+                self._atualizar_loading("Base Imobiliária: Erro", ultimas_linhas, 0)
+                return
+
+            resultado = self._extrair_resultado_modulo_iv()
+            mensagem = (
+                f"Celulares preenchidos: {resultado.get('celulares_preenchidos', 0)}\n"
+                f"E-mails preenchidos: {resultado.get('emails_preenchidos', 0)}\n"
+                f"Telefones adicionados pela integração: {resultado.get('telefones_enriquecidos', 0)}\n"
+                f"E-mails adicionados pela integração: {resultado.get('emails_enriquecidos', 0)}"
+            )
+            self._atualizar_loading("Base Imobiliária: 100%", mensagem, 100)
+            if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
+                self._executar_ui(self.dialog_resultado_base_imobiliaria.open)
+            caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_base_imobiliario_modulo_iv))
+            self._executar_ui(lambda: ui.download(str(caminho), filename=caminho.name))
+        except Exception as erro:
+            self._executar_ui(lambda: ui.notify(f"Erro ao gerar a base imobiliária: {erro}"))
+            self._atualizar_loading("Base Imobiliária: Erro", str(erro), 0)
         finally:
+            if chave_anterior is None:
+                os.environ.pop("key", None)
+            else:
+                os.environ["key"] = chave_anterior
             self.state.rodando = False
-            self.bloqueio.close()
-            self._atualizar_botoes()
+            self._fechar_bloqueio()
+            self._executar_ui(self._atualizar_botoes)
+
+    def _extrair_resultado_modulo_iv(self) -> dict:
+        prefixo = "RESULTADO_MODULO_IV_JSON="
+        for linha in reversed(self.saida_execucao_atual):
+            if linha.startswith(prefixo):
+                return json.loads(linha[len(prefixo):])
+        return {}
 
     def _definir_arquivo_etapa3_saida(self) -> str:
         return (
@@ -1023,6 +1073,8 @@ class IntegracaoEnriquecimentoApp:
     def _atualizar_botoes(self):
         preparacao_existe = self.paths.existe(self.paths.arquivo_preparacao)
         enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
+        imobiliario_existe = self.paths.existe(os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv"))
+        integracao_reidentificada_existe = self.paths.existe(self.paths.arquivo_integracao_reidentificada)
         entrada_existe = bool(self.entrada_service.listar_csvs())
         rodando = self.state.rodando
         autenticado = self.state.autenticado
@@ -1037,8 +1089,8 @@ class IntegracaoEnriquecimentoApp:
             autenticado and not rodando and bool(self._arquivo_revisao_existente()),
         )
         self._definir_habilitado(
-            self.botao_preencher_imobiliario,
-            autenticado and not rodando and bool(self._arquivo_revisao_existente()),
+            self.botao_base_imobiliario_modulo_iv,
+            autenticado and not rodando and imobiliario_existe and integracao_reidentificada_existe,
         )
         self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
 

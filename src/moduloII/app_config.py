@@ -40,12 +40,8 @@ class AppPaths:
         return os.path.join(self.pasta_gerados, "integracao_reidentificada.csv")
 
     @property
-    def arquivo_cadastro_imobiliario_preenchido(self) -> str:
-        return os.path.join(self.pasta_gerados, "cadastro_imobiliario_preenchido.csv")
-
-    @property
-    def pasta_cadastro_imobiliario(self) -> str:
-        return "imobiliario"
+    def arquivo_base_imobiliario_modulo_iv(self) -> str:
+        return os.path.join(self.pasta_gerados, "base_imobiliario_modulo_iv.csv")
 
     @property
     def pasta_dados_processados(self) -> str:

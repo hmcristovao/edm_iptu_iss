@@ -1,5 +1,6 @@
 from functools import reduce
 from contextlib import contextmanager
+from decimal import Decimal, InvalidOperation
 import os
 import re
 import sys
@@ -138,8 +139,27 @@ def encontrar_colunas_chave(df: pd.DataFrame, nome_tabela: str):
 
 def normalizar_documento(serie: pd.Series) -> pd.Series:
     documento = serie.fillna("").astype(str).str.strip()
+    documento = documento.mask(documento.str.lower().isin(("nan", "none", "null")), "")
 
-    return documento.mask(documento.str.lower().isin(("nan", "none", "null")), "")
+    return documento.apply(normalizar_documento_valor)
+
+
+def normalizar_documento_valor(valor: str) -> str:
+    texto = str(valor).strip()
+    if not texto:
+        return ""
+
+    texto_decimal = texto.replace(",", ".")
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?[eE][+-]?\d+", texto_decimal):
+        try:
+            numero = Decimal(texto_decimal)
+        except InvalidOperation:
+            return texto
+
+        if numero == numero.to_integral_value():
+            return format(numero.quantize(Decimal("1")), "f").lstrip("+")
+
+    return texto
 
 
 def chave_com_prefixo(serie: pd.Series, prefixo: str) -> pd.Series:

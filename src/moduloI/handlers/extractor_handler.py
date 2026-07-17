@@ -123,6 +123,14 @@ class ExtractorHandler(AbstractHandler):
                         try:
                             # Forçamos o motor xlrd para evitar que o pandas tente zip/openpyxl
                             df = pd.read_excel(arquivo, header=parameter.header, engine='xlrd')
+                        except ImportError as e:
+                            self.logger.error(
+                                "Falha ao ler XLS binário %s: dependência 'xlrd' não está instalada "
+                                "no ambiente Python que executa a aplicação. Execute: python -m pip install xlrd>=2.0.1. "
+                                "Erro original: %s",
+                                arquivo.name,
+                                e,
+                            )
                         except Exception as e:
                             self.logger.error(f"Falha total no XLS binário {arquivo.name}: {e}")
 

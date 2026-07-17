@@ -1,13 +1,12 @@
 # Integração e Enriquecimento
 ## Visão Geral
 
-O processo é composto por cinco atividades operacionais:
+O processo é composto por quatro atividades operacionais:
 
 1. **Preparação**: lê os CSVs da pasta de trabalho, identifica registros válidos/inválidos e gera a base inicial consolidada.
 2. **Enriquecimento**: compara registros, aplica regras de similaridade, realiza uniões automáticas e marca candidatos para revisão humana.
 3. **Revisão Humana**: permite aprovar ou rejeitar candidatos, registrar observações, identificar o usuário responsável e gerar o arquivo final ou parcial.
 4. **Reidentificação**: usa a chave de pseudonimização para reassociar pseudônimos aos CPFs originais em uma cópia da base final.
-5. **Preenchimento Imobiliário**: preenche somente colunas já existentes no cadastro imobiliário, usando dados da base integrada e cruzando CPFs/CNPJs.
 
 ## Estrutura do Código
 
@@ -22,7 +21,6 @@ avaliador/
     moduloI/              # Leitura, padronização e pseudonimização das bases originais
     moduloII/             # Integração, enriquecimento e configuração
     moduloIII/            # Reidentificação dos pseudônimos
-    moduloIV/             # Preenchimento do cadastro imobiliário
     views/                # Interface gráfica NiceGUI e serviços de tela
 ```
 
@@ -48,8 +46,6 @@ minha_pasta_de_trabalho/
 ```
 
 Todo o fluxo de dados acontece nessa pasta de trabalho. A pasta do código permanece onde o sistema foi iniciado.
-
-Para o módulo IV, mantenha o TXT de parâmetros em `imobiliario/`. O CSV preenchido é uma cópia de `dados_processados/imobiliario.csv`; nenhuma coluna nova é criada.
 
 ## Requisitos
 
@@ -303,7 +299,6 @@ python src\moduloII\preparacao.py
 python src\moduloII\enriquecimento.py
 $env:APP_CHAVE_PSEUDONIMIZACAO = "minha_chave"
 python src\moduloIII\reassociacao.py
-python src\moduloIV\preenchimento_imobiliario.py
 ```
 
 Sem `AVALIADOR_WORKDIR`, os scripts usam a própria pasta do código como pasta de trabalho.

@@ -10,16 +10,18 @@ class MultivariablesHanderBuilder:
 
     def build(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
         # Instanciação dos elos
+        cpf_cnpj_h = CPFCNPJHandler()
         cpf_h = CPFHandler()
         cnpj_h = CNPJHandler()
+        cpf_cnpj_v_h = CPFCNPJValidoHandler()
         cpf_v_h = CPFValidoHandler()
         cnpj_v_h = CNPJValidoHandler()
 
         # Montagem da Chain of Responsibility
-        cpf_h.set_next(cnpj_h).set_next(cpf_v_h).set_next(cnpj_v_h)
+        cpf_cnpj_h.set_next(cpf_h).set_next(cnpj_h).set_next(cpf_cnpj_v_h).set_next(cpf_v_h).set_next(cnpj_v_h)
 
         # Início do processamento
-        resultado = cpf_h.handle(df, col_alvo, nome_amigavel)
+        resultado = cpf_cnpj_h.handle(df, col_alvo, nome_amigavel)
 
         if nome_amigavel not in resultado.columns:
             self.logger.warning(
@@ -30,6 +32,17 @@ class MultivariablesHanderBuilder:
 
 
 # --- Handlers de Limpeza ---
+
+class CPFCNPJHandler(IterHander):
+    def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
+        nome_lower = nome_amigavel.lower()
+        if "cpf" in nome_lower and "cnpj" in nome_lower and "valido" not in nome_lower:
+            serie_limpa = df[col_alvo].astype(str).str.replace(r"\D", "", regex=True)
+            df[nome_amigavel] = serie_limpa.where(serie_limpa.str.len().isin([11, 14]), "")
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Limpeza CPF/CNPJ -> {nome_amigavel}")
+            return df
+        return super().handle(df, col_alvo, nome_amigavel)
+
 
 class CPFHandler(IterHander):
     def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
@@ -56,6 +69,24 @@ class CNPJHandler(IterHander):
 
 
 # --- Handlers de Validação ---
+
+class CPFCNPJValidoHandler(IterHander):
+    def _validar_documento(self, documento: str) -> str:
+        documento = re.sub(r'\D', '', str(documento))
+        if len(documento) == 11:
+            return CPFValidoHandler()._validar_cpf(documento)
+        if len(documento) == 14:
+            return CNPJValidoHandler()._validar_cnpj(documento)
+        return "N"
+
+    def handle(self, df: pd.DataFrame, col_alvo: str, nome_amigavel: str) -> pd.DataFrame:
+        nome_lower = nome_amigavel.lower()
+        if "cpf" in nome_lower and "cnpj" in nome_lower and "valido" in nome_lower:
+            df[nome_amigavel] = df[col_alvo].apply(self._validar_documento)
+            logging.getLogger(self.__class__.__name__).info(f"Sucesso: Validacao CPF/CNPJ -> {nome_amigavel}")
+            return df
+        return super().handle(df, col_alvo, nome_amigavel)
+
 
 class CPFValidoHandler(IterHander):
     def _validar_cpf(self, cpf: str) -> str:
