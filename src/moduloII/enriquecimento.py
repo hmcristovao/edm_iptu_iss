@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import unicodedata
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 
 import pandas as pd
@@ -117,6 +118,10 @@ THRESHOLD_APOIO_NUMERO = 100
 THRESHOLD_APOIO_IDENTIFICADOR_DOCUMENTO = 98
 
 MAX_PARES_POR_VALOR_BLOCO = 1500000
+MAX_WORKERS_COMPARACAO = max(1, (os.cpu_count() or 2) - 1)
+
+_PERFIS_INVALIDOS_WORKER = None
+_PERFIS_VALIDOS_WORKER = None
 
 
 def aplicar_configuracao_externa():
@@ -729,6 +734,84 @@ def marcar_regras_match_automatico(features: pd.DataFrame) -> pd.DataFrame:
     return features
 
 
+def comparar_lote_pares(
+    pares: pd.MultiIndex,
+    perfis_invalidos_comparacao: pd.DataFrame,
+    perfis_validos_comparacao: pd.DataFrame,
+) -> pd.DataFrame:
+    compare = configurar_comparador()
+    features = compare.compute(pares, perfis_invalidos_comparacao, perfis_validos_comparacao)
+    features = calcular_score_total(
+        features,
+        perfis_invalidos_comparacao,
+        perfis_validos_comparacao,
+    )
+    return marcar_regras_match_automatico(features)
+
+
+def inicializar_worker_comparacao(perfis_invalidos_comparacao: pd.DataFrame, perfis_validos_comparacao: pd.DataFrame):
+    global _PERFIS_INVALIDOS_WORKER
+    global _PERFIS_VALIDOS_WORKER
+
+    _PERFIS_INVALIDOS_WORKER = perfis_invalidos_comparacao
+    _PERFIS_VALIDOS_WORKER = perfis_validos_comparacao
+
+
+def comparar_lote_pares_worker(pares: pd.MultiIndex) -> pd.DataFrame:
+    if _PERFIS_INVALIDOS_WORKER is None or _PERFIS_VALIDOS_WORKER is None:
+        raise RuntimeError("Worker de comparacao nao inicializado.")
+
+    return comparar_lote_pares(pares, _PERFIS_INVALIDOS_WORKER, _PERFIS_VALIDOS_WORKER)
+
+
+def definir_workers_comparacao(total_lotes: int) -> int:
+    if total_lotes <= 1:
+        return 1
+
+    return max(1, min(total_lotes, MAX_WORKERS_COMPARACAO))
+
+
+def acumular_resultado_comparacao(
+    features_chunk: pd.DataFrame,
+    matches_list: list[pd.DataFrame],
+    linhas_revisao: set,
+    melhor_score_por_invalido: dict,
+    pares_revisao: dict,
+) -> None:
+    indices_revisao = features_chunk.index[
+        features_chunk["score_total"] >= THRESHOLD_REVISAR
+    ].get_level_values(0)
+    linhas_revisao.update(indices_revisao)
+
+    candidatos_revisao = features_chunk[
+        (features_chunk["score_total"] >= THRESHOLD_REVISAR)
+        & (~features_chunk["match_automatico"])
+    ]
+
+    for (idx_invalido, idx_valido), row in candidatos_revisao.iterrows():
+        score = row["score_total"]
+        par_atual = pares_revisao.get(idx_invalido)
+
+        if par_atual is None or score > par_atual["score_total"]:
+            pares_revisao[idx_invalido] = {
+                "idx_valido": idx_valido,
+                "score_total": score,
+            }
+
+    melhores_do_lote = features_chunk["score_total"].groupby(level=0).max()
+
+    for idx_invalido, score in melhores_do_lote.items():
+        score_atual = melhor_score_por_invalido.get(idx_invalido, 0)
+
+        if score > score_atual:
+            melhor_score_por_invalido[idx_invalido] = score
+
+    matches_chunk = features_chunk[features_chunk["match_automatico"]].copy()
+
+    if not matches_chunk.empty:
+        matches_list.append(matches_chunk)
+
+
 def preparar_perfis_para_comparacao(perfis: pd.DataFrame) -> pd.DataFrame:
     perfis_comparacao = perfis.copy()
     colunas_comparacao = [parametro["nome"] for parametro in PARAMETROS_COMPARACAO]
@@ -933,64 +1016,63 @@ def comparar_e_juntar(df_validos: pd.DataFrame, df_invalidos: pd.DataFrame):
         return df_final, pd.DataFrame(), pd.DataFrame()
 
     print("\nComparando os pares...")
-    compare = configurar_comparador()
 
     tamanho_lote = 50000
     total_lotes = (len(candidate_links) + tamanho_lote - 1) // tamanho_lote
+    lotes_pares = list(iterar_lotes_pares(candidate_links, tamanho_lote))
+    max_workers = definir_workers_comparacao(total_lotes)
     matches_list = []
     linhas_revisao = set()
     melhor_score_por_invalido = {}
     pares_revisao = {}
 
-    for chunk in tqdm(
-        iterar_lotes_pares(candidate_links, tamanho_lote),
-        total=total_lotes,
-        desc="Calculando similaridade",
-        unit="lote",
-        file=sys.stdout,
-        dynamic_ncols=False,
-        mininterval=1,
-    ):
-        features_chunk = compare.compute(chunk, perfis_invalidos_comparacao, perfis_validos_comparacao)
-        features_chunk = calcular_score_total(
-            features_chunk,
-            perfis_invalidos_comparacao,
-            perfis_validos_comparacao,
-        )
-        features_chunk = marcar_regras_match_automatico(features_chunk)
+    if max_workers > 1:
+        print(f"  Usando ProcessPoolExecutor com {max_workers} processo(s).")
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            initializer=inicializar_worker_comparacao,
+            initargs=(perfis_invalidos_comparacao, perfis_validos_comparacao),
+        ) as executor:
+            barra_features = tqdm(
+                executor.map(comparar_lote_pares_worker, lotes_pares),
+                total=total_lotes,
+                desc="Calculando similaridade",
+                unit="lote",
+                file=sys.stdout,
+                dynamic_ncols=False,
+                mininterval=1,
+            )
 
-        indices_revisao = features_chunk.index[
-            features_chunk["score_total"] >= THRESHOLD_REVISAR
-        ].get_level_values(0)
-        linhas_revisao.update(indices_revisao)
-
-        candidatos_revisao = features_chunk[
-            (features_chunk["score_total"] >= THRESHOLD_REVISAR)
-            & (~features_chunk["match_automatico"])
-        ]
-
-        for (idx_invalido, idx_valido), row in candidatos_revisao.iterrows():
-            score = row["score_total"]
-            par_atual = pares_revisao.get(idx_invalido)
-
-            if par_atual is None or score > par_atual["score_total"]:
-                pares_revisao[idx_invalido] = {
-                    "idx_valido": idx_valido,
-                    "score_total": score,
-                }
-
-        melhores_do_lote = features_chunk["score_total"].groupby(level=0).max()
-
-        for idx_invalido, score in melhores_do_lote.items():
-            score_atual = melhor_score_por_invalido.get(idx_invalido, 0)
-
-            if score > score_atual:
-                melhor_score_por_invalido[idx_invalido] = score
-
-        matches_chunk = features_chunk[features_chunk["match_automatico"]].copy()
-
-        if not matches_chunk.empty:
-            matches_list.append(matches_chunk)
+            for features_chunk in barra_features:
+                acumular_resultado_comparacao(
+                    features_chunk,
+                    matches_list,
+                    linhas_revisao,
+                    melhor_score_por_invalido,
+                    pares_revisao,
+                )
+    else:
+        for chunk in tqdm(
+            lotes_pares,
+            total=total_lotes,
+            desc="Calculando similaridade",
+            unit="lote",
+            file=sys.stdout,
+            dynamic_ncols=False,
+            mininterval=1,
+        ):
+            features_chunk = comparar_lote_pares(
+                chunk,
+                perfis_invalidos_comparacao,
+                perfis_validos_comparacao,
+            )
+            acumular_resultado_comparacao(
+                features_chunk,
+                matches_list,
+                linhas_revisao,
+                melhor_score_por_invalido,
+                pares_revisao,
+            )
 
     if matches_list:
         matches = pd.concat(matches_list).sort_values(by="score_total", ascending=False)

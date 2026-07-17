@@ -12,6 +12,7 @@ from src.moduloII.app_config import (
     COLUNA_USUARIO_REVISAO,
 )
 from src.moduloII.services import RevisaoService, extrair_porcentagem, texto_valor, valor_vazio
+from src.moduloII import enriquecimento
 
 
 class ServicesModuloIITest(unittest.TestCase):
@@ -73,6 +74,52 @@ class ServicesModuloIITest(unittest.TestCase):
         self.assertEqual(resultado.at[0, COLUNA_DECISAO_REVISAO], "aprovar")
         self.assertEqual(resultado.at[0, COLUNA_OBSERVACAO_REVISAO], "ok")
         self.assertEqual(resultado.at[0, COLUNA_DATA_REVISAO], "2026-07-13 10:00:00")
+
+    def test_compara_lote_de_pares_retorna_scores_e_regras(self):
+        perfis_invalidos = pd.DataFrame(
+            {
+                "nome": ["ana maria"],
+                "data_nascimento": [""],
+                "telefone": ["81999990000"],
+                "email": [""],
+                "cep": [""],
+                "endereco": [""],
+                "numero": [""],
+                "bairro": [""],
+                "cidade": [""],
+                "identificador_documento": [""],
+                "cadastro_servico": [""],
+            },
+            index=[10],
+        )
+        perfis_validos = pd.DataFrame(
+            {
+                "nome": ["ana maria"],
+                "data_nascimento": [""],
+                "telefone": ["81999990000"],
+                "email": [""],
+                "cep": [""],
+                "endereco": [""],
+                "numero": [""],
+                "bairro": [""],
+                "cidade": [""],
+                "identificador_documento": [""],
+                "cadastro_servico": [""],
+            },
+            index=[20],
+        )
+        pares = pd.MultiIndex.from_tuples([(10, 20)])
+
+        resultado = enriquecimento.comparar_lote_pares(
+            pares,
+            enriquecimento.preparar_perfis_para_comparacao(perfis_invalidos),
+            enriquecimento.preparar_perfis_para_comparacao(perfis_validos),
+        )
+
+        self.assertIn("score_total", resultado.columns)
+        self.assertIn("match_automatico", resultado.columns)
+        self.assertEqual(resultado.index.tolist(), [(10, 20)])
+        self.assertTrue(resultado.iloc[0]["match_automatico"])
 
 
 if __name__ == "__main__":
