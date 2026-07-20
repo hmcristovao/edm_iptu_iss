@@ -13,7 +13,22 @@ class ProcessamentoLegadoService:
         if not self.paths.work_dir.is_dir():
             return []
 
-        return sorted(self.paths.work_dir.rglob("parametros_*.txt"))
+        pastas_ignoradas = [
+            self.paths.resolver(self.paths.pasta_gerados),
+            self.paths.resolver("parametros"),
+        ]
+        return sorted(
+            arquivo
+            for arquivo in self.paths.work_dir.rglob("parametros_*.txt")
+            if not any(self._esta_dentro_de(arquivo, pasta) for pasta in pastas_ignoradas)
+        )
+
+    def _esta_dentro_de(self, arquivo: Path, pasta: Path) -> bool:
+        try:
+            arquivo.resolve().relative_to(pasta.resolve())
+            return True
+        except ValueError:
+            return False
 
     def executar(self, chave: str, ao_progredir: Callable[[str], None]) -> dict:
         from src.moduloI.Domain.Package import Package
@@ -65,4 +80,3 @@ class ProcessamentoLegadoService:
             "erros": erros,
             "saida": self.paths.pasta_dados_processados,
         }
-

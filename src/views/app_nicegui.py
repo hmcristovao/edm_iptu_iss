@@ -18,6 +18,7 @@ from src.moduloII.services import (
     texto_valor,
 )
 from src.moduloIII.reassociacao import ReidentificacaoService
+from src.parametrizacao import GeradorParametrosService
 from src.views.app_state import AppState
 
 
@@ -29,6 +30,7 @@ class IntegracaoEnriquecimentoApp:
         self.config_service = IntegracaoConfigService(self.paths, self.settings)
         self.entrada_service = EntradaService(self.paths)
         self.processamento_legado_service = ProcessamentoLegadoService(self.paths)
+        self.gerador_parametros_service = GeradorParametrosService(self.paths)
         self.revisao_service = RevisaoService(self.paths)
         self.reidentificacao_service = ReidentificacaoService(self.paths)
         self.pipeline_runner = PipelineRunner(self.paths)
@@ -144,6 +146,13 @@ class IntegracaoEnriquecimentoApp:
             with ui.row().classes("w-full justify-end"):
                 ui.button("Fechar", on_click=self.dialog_resultado_base_imobiliaria.close).props("flat")
 
+        self.dialog_resultado_parametros = ui.dialog()
+        with self.dialog_resultado_parametros, ui.card().classes("w-[560px] gap-4 rounded-lg"):
+            ui.label("Resultado da Parametrização").classes("text-xl font-semibold text-slate-900")
+            self.resultado_parametros_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Fechar", on_click=self.dialog_resultado_parametros.close).props("flat")
+
         self.bloqueio = ui.dialog().props("persistent")
         with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
             ui.label("Execução em Andamento").classes("text-lg font-semibold text-slate-900")
@@ -226,6 +235,10 @@ class IntegracaoEnriquecimentoApp:
                     "Processar Arquivos Originais",
                     on_click=self.abrir_confirmacao_processamento_legado,
                 ).props("color=primary unelevated")
+                self.botao_gerar_parametros = ui.button(
+                    "Gerar Parâmetros",
+                    on_click=self.gerar_parametros,
+                ).props("color=secondary unelevated")
             self.processamento_legado_status = ui.label("").classes("text-sm text-slate-600")
 
     def _montar_card_configuracoes(self):
@@ -408,6 +421,51 @@ class IntegracaoEnriquecimentoApp:
             self.state.rodando = False
             self._atualizar_status_entrada()
             self._atualizar_status()
+            self._atualizar_botoes()
+
+    async def gerar_parametros(self):
+        if self.state.rodando:
+            return
+        if not self.state.autenticado:
+            ui.notify("Faça login antes de gerar os parâmetros.")
+            self.abrir_login()
+            return
+        if not self.paths.existe("parametros"):
+            ui.notify("Selecione uma pasta de trabalho que contenha a pasta parametros.")
+            return
+
+        self.state.rodando = True
+        self._atualizar_botoes()
+        self._abrir_loading("Gerando Parâmetros...", "Lendo a pasta parametros da pasta de trabalho.")
+
+        try:
+            resultado = await asyncio.to_thread(self.gerador_parametros_service.gerar)
+        except Exception as erro:
+            self._atualizar_loading("Parametrização: Erro", str(erro), 0)
+            ui.notify(f"Erro ao gerar parâmetros: {erro}")
+        else:
+            arquivos = "\n".join(f"- {arquivo}" for arquivo in resultado.arquivos[:12])
+            if len(resultado.arquivos) > 12:
+                arquivos += f"\n- e mais {len(resultado.arquivos) - 12} arquivo(s)"
+            erros = "\n".join(f"- {erro}" for erro in resultado.erros[:8])
+            mensagem = (
+                f"{resultado.gerados} arquivo(s) de parâmetros gerado(s).\n"
+                f"Entrada: {resultado.entrada}\n"
+                f"Saída: {resultado.saida}"
+            )
+            if arquivos:
+                mensagem += f"\n\nArquivos:\n{arquivos}"
+            if erros:
+                mensagem += f"\n\nErros:\n{erros}"
+
+            self._atualizar_loading("Parametrização: 100%", mensagem, 100)
+            self.resultado_parametros_label.set_text(mensagem)
+            self.dialog_resultado_parametros.open()
+            ui.notify("Parâmetros gerados.")
+        finally:
+            self.state.rodando = False
+            self._fechar_bloqueio()
+            self._atualizar_status_entrada()
             self._atualizar_botoes()
 
     def _drenar_progresso(self, fila_progresso: queue.Queue, ao_progredir):
@@ -1083,12 +1141,14 @@ class IntegracaoEnriquecimentoApp:
         enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
         imobiliario_existe = self.paths.existe(os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv"))
         integracao_reidentificada_existe = self.paths.existe(self.paths.arquivo_integracao_reidentificada)
+        parametros_existe = self.paths.existe("parametros")
         entrada_existe = bool(self.entrada_service.listar_csvs())
         rodando = self.state.rodando
         autenticado = self.state.autenticado
 
         self._definir_habilitado(self.botao_pasta_trabalho, autenticado and not rodando)
         self._definir_habilitado(self.botao_processamento_legado, autenticado and not rodando)
+        self._definir_habilitado(self.botao_gerar_parametros, autenticado and not rodando and parametros_existe)
         self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)

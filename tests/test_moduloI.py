@@ -10,7 +10,9 @@ from src.moduloI.Domain.Parameters import Parameters
 from src.moduloI.handlers.adapters.anomizador.anonimizador_reversivel_adaptado import AnonimizadorReversivel
 from src.moduloI.handlers.export_handler import ExportHandler
 from src.moduloI.handlers.ultis.MultivariablesHander import MultivariablesHanderBuilder
+from src.moduloI.services import ProcessamentoLegadoService
 from src.moduloI.usecase.leitor import ParameterReader
+from src.moduloII.app_config import AppPaths
 
 
 class ParameterReaderTest(unittest.TestCase):
@@ -60,6 +62,28 @@ class ParameterReaderTest(unittest.TestCase):
                 {"cpfCnpj": ["cpf", "cnpj"]},
             ],
         )
+
+
+class ProcessamentoLegadoServiceTest(unittest.TestCase):
+    def test_lista_parametros_ignora_pastas_do_parametrizador(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            raiz = Path(tmp)
+            entrada = raiz / "fonte"
+            entrada.mkdir()
+            parametros_entrada = entrada / "parametros_fonte.txt"
+            parametros_entrada.write_text("Variables:\n", encoding="utf-8")
+
+            parametros_modelo = raiz / "parametros" / "Fonte"
+            parametros_modelo.mkdir(parents=True)
+            (parametros_modelo / "parametros_fonte.txt").write_text("Variables:\n", encoding="utf-8")
+
+            parametros_gerados = raiz / "arquivos_gerados" / "parametros" / "Fonte"
+            parametros_gerados.mkdir(parents=True)
+            (parametros_gerados / "parametros_fonte.txt").write_text("Variables:\n", encoding="utf-8")
+
+            arquivos = ProcessamentoLegadoService(AppPaths(work_dir=raiz)).listar_parametros()
+
+        self.assertEqual(arquivos, [parametros_entrada])
 
 
 class AnonimizadorReversivelTest(unittest.TestCase):
