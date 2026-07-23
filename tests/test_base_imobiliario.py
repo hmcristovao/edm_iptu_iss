@@ -149,6 +149,9 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
                 "telefoneSaude": ["81999990000 | 8133334444", "8132221111"],
                 "celularEducacao": ["8177778888", ""],
                 "emailSaude": ["ana@exemplo.com", "contato@empresa.com | novo@empresa.com"],
+                "id_revisao": ["REV000001", ""],
+                "usuario_revisao": ["maria", ""],
+                "data_revisao": ["2026-07-23 10:00:00", ""],
                 "nome": ["Ana", "Empresa"],
             }
         )
@@ -160,6 +163,15 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["8133334444", "8132221111"])
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}2"].tolist(), ["8177778888", ""])
         self.assertEqual(imobiliario[f"{PREFIXO_EMAIL_ENRIQUECIDO}1"].tolist(), ["ana@exemplo.com", "novo@empresa.com"])
+        self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_origem"].tolist(), ["telefoneSaude", "telefoneSaude"])
+        self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_id_revisao"].tolist(), ["REV000001", ""])
+        self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_usuario_revisao"].tolist(), ["maria", ""])
+        self.assertEqual(
+            imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_data_revisao"].tolist(),
+            ["2026-07-23 10:00:00", ""],
+        )
+        self.assertEqual(imobiliario[f"{PREFIXO_EMAIL_ENRIQUECIDO}1_origem"].tolist(), ["emailSaude", "emailSaude"])
+        self.assertEqual(imobiliario[f"{PREFIXO_EMAIL_ENRIQUECIDO}1_id_revisao"].tolist(), ["REV000001", ""])
 
     def test_nao_adiciona_telefone_repetido_com_formatacao_diferente(self):
         imobiliario = pd.DataFrame(
@@ -186,6 +198,69 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(emails, 1)
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["8177778888"])
         self.assertEqual(imobiliario[f"{PREFIXO_EMAIL_ENRIQUECIDO}1"].tolist(), ["novo@exemplo.com"])
+
+    def test_nao_enriquece_contato_de_linha_pendente_de_revisao_humana(self):
+        imobiliario = pd.DataFrame(
+            {
+                COLUNA_DOCUMENTO: ["52998224725"],
+                COLUNA_CPF_VALIDO: ["S"],
+                COLUNA_CNPJ_VALIDO: ["N"],
+                COLUNA_INSCRICAO: ["100"],
+                COLUNA_CELULAR: [""],
+                COLUNA_EMAIL: [""],
+            }
+        )
+        integracao = pd.DataFrame(
+            {
+                "merge_key": ["CPF_52998224725"],
+                "telefoneSaude": ["81999990000"],
+                "emailSaude": ["ana@exemplo.com"],
+                "id_revisao": ["REV000001"],
+                "usuario_revisao": [""],
+                "data_revisao": [""],
+            }
+        )
+
+        telefones, emails = self.service._enriquecer_contatos(imobiliario, integracao)
+
+        self.assertEqual(telefones, 0)
+        self.assertEqual(emails, 0)
+        self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}1", imobiliario.columns)
+        self.assertNotIn(f"{PREFIXO_EMAIL_ENRIQUECIDO}1", imobiliario.columns)
+
+    def test_move_colunas_de_rastreio_para_o_final_da_tabela(self):
+        df = pd.DataFrame(
+            columns=[
+                COLUNA_DOCUMENTO,
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_origem",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_id_revisao",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_usuario_revisao",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_data_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_origem",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_id_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_usuario_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_data_revisao",
+                COLUNA_INSCRICAO,
+            ]
+        )
+
+        resultado = self.service._mover_colunas_rastreio_para_final(df)
+
+        self.assertEqual(
+            resultado.columns[-8:].tolist(),
+            [
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_origem",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_id_revisao",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_usuario_revisao",
+                f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_data_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_origem",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_id_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_usuario_revisao",
+                f"{PREFIXO_EMAIL_ENRIQUECIDO}1_data_revisao",
+            ],
+        )
 
 
 if __name__ == "__main__":

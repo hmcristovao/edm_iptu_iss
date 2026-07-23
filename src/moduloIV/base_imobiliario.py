@@ -11,7 +11,12 @@ if __package__ in {None, ""}:
 import pandas as pd
 
 from src.moduloI.handlers.adapters.anomizador.anonimizador_reversivel_adaptado import AnonimizadorReversivel
-from src.moduloII.app_config import AppPaths
+from src.moduloII.app_config import (
+    COLUNA_DATA_REVISAO,
+    COLUNA_REVISAO as COLUNA_ID_REVISAO,
+    COLUNA_USUARIO_REVISAO,
+    AppPaths,
+)
 from src.moduloII.enriquecimento import PARAMETROS_COMPARACAO
 
 
@@ -25,6 +30,15 @@ COLUNA_EMAIL = "emailImobiliario"
 COLUNA_MERGE_KEY = "merge_key"
 PREFIXO_TELEFONE_ENRIQUECIDO = "telefoneEnriquecido"
 PREFIXO_EMAIL_ENRIQUECIDO = "emailEnriquecido"
+
+
+@dataclass(frozen=True)
+class ContatoRastreado:
+    valor: str
+    origem: str
+    id_revisao: str
+    usuario_revisao: str
+    data_revisao: str
 
 
 @dataclass(frozen=True)
@@ -89,6 +103,7 @@ class BaseImobiliarioModuloIVService:
         self._remover_colunas_saida(df_saida)
         self._proteger_documento_saida(df_saida)
         df_saida = self._ordenar_validos_primeiro(df_saida)
+        df_saida = self._mover_colunas_rastreio_para_final(df_saida)
 
         self.paths.garantir_pasta_arquivo(saida)
         df_saida.to_csv(self.paths.resolver(saida), sep=";", encoding="utf-8-sig", index=False)
@@ -119,37 +134,56 @@ class BaseImobiliarioModuloIVService:
         for _, linha in df_imobiliario.iterrows():
             chave = self._chave_documento_linha(linha)
             contatos = mapa.get(chave, {"telefone": [], "email": []})
-            telefones = self._novos_valores(contatos["telefone"], [linha.get(COLUNA_CELULAR, "")])
-            emails = self._novos_valores(contatos["email"], [linha.get(COLUNA_EMAIL, "")])
+            telefones = self._novos_contatos(contatos["telefone"], [linha.get(COLUNA_CELULAR, "")])
+            emails = self._novos_contatos(contatos["email"], [linha.get(COLUNA_EMAIL, "")])
             telefones_por_linha.append(telefones)
             emails_por_linha.append(emails)
 
-        self._criar_colunas_enriquecidas(df_imobiliario, PREFIXO_TELEFONE_ENRIQUECIDO, telefones_por_linha)
-        self._criar_colunas_enriquecidas(df_imobiliario, PREFIXO_EMAIL_ENRIQUECIDO, emails_por_linha)
+        self._criar_colunas_enriquecidas_rastreadas(
+            df_imobiliario,
+            PREFIXO_TELEFONE_ENRIQUECIDO,
+            telefones_por_linha,
+        )
+        self._criar_colunas_enriquecidas_rastreadas(
+            df_imobiliario,
+            PREFIXO_EMAIL_ENRIQUECIDO,
+            emails_por_linha,
+        )
 
         linhas_com_telefone = sum(1 for valores in telefones_por_linha if valores)
         linhas_com_email = sum(1 for valores in emails_por_linha if valores)
         return linhas_com_telefone, linhas_com_email
 
-    def _mapear_contatos_por_documento(self, df: pd.DataFrame) -> dict[str, dict[str, list[str]]]:
+    def _mapear_contatos_por_documento(self, df: pd.DataFrame) -> dict[str, dict[str, list[ContatoRastreado]]]:
         colunas_documento = self._colunas_documento_integracao(df)
         colunas_telefone = self._colunas_por_parametro(df, "telefone")
         colunas_email = self._colunas_por_parametro(df, "email")
-        mapa: dict[str, dict[str, list[str]]] = {}
+        mapa: dict[str, dict[str, list[ContatoRastreado]]] = {}
 
         for _, linha in df.iterrows():
             chaves = self._chaves_documento_integracao(linha, colunas_documento)
             if not chaves:
                 continue
+            if self._revisao_pendente(linha):
+                continue
 
-            telefones = self._valores_linha(linha, colunas_telefone)
-            emails = self._valores_linha(linha, colunas_email)
+            telefones = self._contatos_linha(linha, colunas_telefone)
+            emails = self._contatos_linha(linha, colunas_email)
             for chave in chaves:
                 destino = mapa.setdefault(chave, {"telefone": [], "email": []})
-                destino["telefone"] = self._novos_valores([*destino["telefone"], *telefones], [])
-                destino["email"] = self._novos_valores([*destino["email"], *emails], [])
+                destino["telefone"] = self._novos_contatos([*destino["telefone"], *telefones], [])
+                destino["email"] = self._novos_contatos([*destino["email"], *emails], [])
 
         return mapa
+
+    def _revisao_pendente(self, linha: pd.Series) -> bool:
+        if not self._texto(linha.get(COLUNA_ID_REVISAO, "")):
+            return False
+
+        return not (
+            self._texto(linha.get(COLUNA_USUARIO_REVISAO, ""))
+            and self._texto(linha.get(COLUNA_DATA_REVISAO, ""))
+        )
 
     def _colunas_documento_integracao(self, df: pd.DataFrame) -> list[str]:
         colunas = []
@@ -205,14 +239,41 @@ class BaseImobiliarioModuloIVService:
             if regex.search(str(coluna)) and not any(termo in str(coluna).lower() for termo in termos_excluidos)
         ]
 
-    def _valores_linha(self, linha: pd.Series, colunas: list[str]) -> list[str]:
-        valores = []
+    def _contatos_linha(self, linha: pd.Series, colunas: list[str]) -> list[ContatoRastreado]:
+        contatos = []
         for coluna in colunas:
             for parte in str(linha.get(coluna, "")).split("|"):
                 texto = self._texto(parte)
                 if texto:
-                    valores.append(texto)
-        return self._novos_valores(valores, [])
+                    contatos.append(
+                        ContatoRastreado(
+                            valor=texto,
+                            origem=str(coluna),
+                            id_revisao=self._texto(linha.get(COLUNA_ID_REVISAO, "")),
+                            usuario_revisao=self._texto(linha.get(COLUNA_USUARIO_REVISAO, "")),
+                            data_revisao=self._texto(linha.get(COLUNA_DATA_REVISAO, "")),
+                        )
+                    )
+        return self._novos_contatos(contatos, [])
+
+    def _novos_contatos(
+        self,
+        candidatos: list[ContatoRastreado],
+        existentes: list,
+    ) -> list[ContatoRastreado]:
+        vistos = set()
+        contatos = []
+        for valor in existentes:
+            texto = self._texto(valor)
+            if texto:
+                vistos.add(self._chave_unicidade_contato(texto))
+        for contato in candidatos:
+            texto = self._texto(contato.valor)
+            chave = self._chave_unicidade_contato(texto)
+            if texto and chave not in vistos:
+                contatos.append(contato)
+                vistos.add(chave)
+        return contatos
 
     def _novos_valores(self, candidatos: list[str], existentes: list) -> list[str]:
         vistos = set()
@@ -242,13 +303,37 @@ class BaseImobiliarioModuloIVService:
 
         return texto.lower()
 
-    def _criar_colunas_enriquecidas(self, df: pd.DataFrame, prefixo: str, valores_por_linha: list[list[str]]) -> None:
-        maximo = max((len(valores) for valores in valores_por_linha), default=0)
+    def _criar_colunas_enriquecidas_rastreadas(
+        self,
+        df: pd.DataFrame,
+        prefixo: str,
+        contatos_por_linha: list[list[ContatoRastreado]],
+    ) -> None:
+        maximo = max((len(contatos) for contatos in contatos_por_linha), default=0)
         for posicao in range(maximo):
-            df[f"{prefixo}{posicao + 1}"] = [
-                valores[posicao] if posicao < len(valores) else ""
-                for valores in valores_por_linha
+            coluna_base = f"{prefixo}{posicao + 1}"
+            df[coluna_base] = [self._atributo_contato(contatos, posicao, "valor") for contatos in contatos_por_linha]
+            df[f"{coluna_base}_origem"] = [
+                self._atributo_contato(contatos, posicao, "origem")
+                for contatos in contatos_por_linha
             ]
+            df[f"{coluna_base}_id_revisao"] = [
+                self._atributo_contato(contatos, posicao, "id_revisao")
+                for contatos in contatos_por_linha
+            ]
+            df[f"{coluna_base}_usuario_revisao"] = [
+                self._atributo_contato(contatos, posicao, "usuario_revisao")
+                for contatos in contatos_por_linha
+            ]
+            df[f"{coluna_base}_data_revisao"] = [
+                self._atributo_contato(contatos, posicao, "data_revisao")
+                for contatos in contatos_por_linha
+            ]
+
+    def _atributo_contato(self, contatos: list[ContatoRastreado], posicao: int, atributo: str) -> str:
+        if posicao >= len(contatos):
+            return ""
+        return self._texto(getattr(contatos[posicao], atributo))
 
     def _remover_duplicados_agregando_inscricoes(self, df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
         self._validar_colunas_obrigatorias(df)
@@ -386,6 +471,28 @@ class BaseImobiliarioModuloIVService:
             return
 
         df[COLUNA_DOCUMENTO] = df[COLUNA_DOCUMENTO].apply(self._formatar_como_texto)
+
+    def _mover_colunas_rastreio_para_final(self, df: pd.DataFrame) -> pd.DataFrame:
+        sufixos_rastreio = (
+            "_origem",
+            "_id_revisao",
+            "_usuario_revisao",
+            "_data_revisao",
+        )
+        colunas_rastreio = [
+            coluna
+            for coluna in df.columns
+            if (
+                str(coluna).startswith(PREFIXO_TELEFONE_ENRIQUECIDO)
+                or str(coluna).startswith(PREFIXO_EMAIL_ENRIQUECIDO)
+            )
+            and str(coluna).endswith(sufixos_rastreio)
+        ]
+        if not colunas_rastreio:
+            return df
+
+        colunas_base = [coluna for coluna in df.columns if coluna not in colunas_rastreio]
+        return df[colunas_base + colunas_rastreio]
 
     def _formatar_como_texto(self, valor) -> str:
         texto = self._texto(valor)
