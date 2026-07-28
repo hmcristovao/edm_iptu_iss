@@ -1,0 +1,6 @@
+Sufix: 
+Header#: 
+Footer#: 
+Format:
+CSV separator: 
+Variables:

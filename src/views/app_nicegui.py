@@ -335,6 +335,7 @@ class IntegracaoEnriquecimentoApp:
         self.paths.definir_pasta_trabalho(caminho)
         self.paths.garantir_pasta(self.paths.pasta_gerados)
         self.paths.garantir_pasta(self.paths.pasta_logs)
+        self.state.pasta_trabalho_selecionada = True
         self.dialog_pasta_trabalho.close()
         self._atualizar_status_entrada()
         self._atualizar_status()
@@ -430,13 +431,13 @@ class IntegracaoEnriquecimentoApp:
             ui.notify("Faça login antes de gerar os parâmetros.")
             self.abrir_login()
             return
-        if not self.paths.existe("parametros"):
-            ui.notify("Selecione uma pasta de trabalho que contenha a pasta parametros.")
+        if not self.state.pasta_trabalho_selecionada:
+            ui.notify("Selecione uma pasta de trabalho antes de gerar os parâmetros.")
             return
 
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading("Gerando Parâmetros...", "Lendo a pasta parametros da pasta de trabalho.")
+        self._abrir_loading("Gerando Parâmetros...", "Analisando as pastas da pasta de trabalho.")
 
         try:
             resultado = await asyncio.to_thread(self.gerador_parametros_service.gerar)
@@ -467,6 +468,9 @@ class IntegracaoEnriquecimentoApp:
             self._fechar_bloqueio()
             self._atualizar_status_entrada()
             self._atualizar_botoes()
+
+    def _pode_gerar_parametros(self) -> bool:
+        return self.state.autenticado and not self.state.rodando and self.state.pasta_trabalho_selecionada
 
     def _drenar_progresso(self, fila_progresso: queue.Queue, ao_progredir):
         while True:
@@ -1141,14 +1145,13 @@ class IntegracaoEnriquecimentoApp:
         enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
         imobiliario_existe = self.paths.existe(os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv"))
         integracao_reidentificada_existe = self.paths.existe(self.paths.arquivo_integracao_reidentificada)
-        parametros_existe = self.paths.existe("parametros")
         entrada_existe = bool(self.entrada_service.listar_csvs())
         rodando = self.state.rodando
         autenticado = self.state.autenticado
 
         self._definir_habilitado(self.botao_pasta_trabalho, autenticado and not rodando)
         self._definir_habilitado(self.botao_processamento_legado, autenticado and not rodando)
-        self._definir_habilitado(self.botao_gerar_parametros, autenticado and not rodando and parametros_existe)
+        self._definir_habilitado(self.botao_gerar_parametros, self._pode_gerar_parametros())
         self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)

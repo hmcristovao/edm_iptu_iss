@@ -8,6 +8,7 @@ class AppState:
     rodando: bool = False
     etapa3_ativa: bool = False
     autenticado: bool = False
+    pasta_trabalho_selecionada: bool = False
     usuario: str = ""
     df: pd.DataFrame | None = None
     pares: list[dict] = field(default_factory=list)
