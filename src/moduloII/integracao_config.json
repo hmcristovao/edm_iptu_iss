@@ -1,8 +1,8 @@
 {
-  "threshold_similaridade": 70,
-  "threshold_revisar": 65,
-  "threshold_apoio_nome": 90,
-  "threshold_apoio_telefone": 90,
+  "threshold_similaridade": 80,
+  "threshold_revisar": 85,
+  "threshold_apoio_nome": 95,
+  "threshold_apoio_telefone": 95,
   "threshold_apoio_email": 98,
   "threshold_apoio_nascimento": 98,
   "threshold_apoio_endereco": 98,

@@ -701,16 +701,16 @@ class IntegracaoEnriquecimentoApp:
         try:
             df, pares, decisoes, indice_atual = await asyncio.to_thread(self.preparar_revisao)
         except (FileNotFoundError, PermissionError, ValueError) as erro:
-            ui.notify(str(erro))
+            self._executar_ui(lambda: ui.notify(str(erro)))
         except Exception as erro:
-            ui.notify(f"Erro ao carregar revisão: {erro}")
+            self._executar_ui(lambda: ui.notify(f"Erro ao carregar revisão: {erro}"))
         else:
             self.state.df = df
             self.state.pares = pares
             self.state.decisoes = decisoes
             self.state.indice_atual = indice_atual
             self.state.etapa3_ativa = True
-            ui.notify(f"Revisão carregada com {len(pares)} pares.")
+            self._executar_ui(lambda: ui.notify(f"Revisão carregada com {len(pares)} pares."))
         finally:
             self.state.rodando = False
             self._fechar_bloqueio()
@@ -962,7 +962,7 @@ class IntegracaoEnriquecimentoApp:
         return ""
 
     def _agendar_desenho_revisao(self):
-        ui.timer(0.05, self._desenhar_revisao, once=True)
+        self._executar_ui(lambda: ui.timer(0.05, self._desenhar_revisao, once=True))
 
     def _desenhar_revisao(self):
         self.area_revisao.clear()
@@ -1088,8 +1088,8 @@ class IntegracaoEnriquecimentoApp:
                     ui.table(
                         columns=colunas,
                         rows=self._linhas_registro(linha_valida),
-                        pagination={"rowsPerPage": 0},
-                    ).props("hide-pagination").classes("w-full")
+                        pagination=self._paginacao_tabela_revisao(),
+                    ).classes("w-full")
 
             with ui.card().classes("flex-1 min-w-0 gap-2 border border-slate-200 bg-white shadow-none"):
                 ui.label("Registro inválido").classes("text-sm font-semibold text-slate-900")
@@ -1097,8 +1097,8 @@ class IntegracaoEnriquecimentoApp:
                     ui.table(
                         columns=colunas,
                         rows=self._linhas_registro(linha_invalida),
-                        pagination={"rowsPerPage": 0},
-                    ).props("hide-pagination").classes("w-full")
+                        pagination=self._paginacao_tabela_revisao(),
+                    ).classes("w-full")
 
     def _linhas_registro(self, linha) -> list[dict]:
         linhas = []
@@ -1108,6 +1108,9 @@ class IntegracaoEnriquecimentoApp:
                 continue
             linhas.append({"campo": campo, "valor": texto})
         return linhas
+
+    def _paginacao_tabela_revisao(self) -> dict:
+        return {"rowsPerPage": 20}
 
     def pausar_revisao(self):
         self.state.etapa3_ativa = False
