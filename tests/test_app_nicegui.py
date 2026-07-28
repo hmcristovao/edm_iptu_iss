@@ -24,6 +24,17 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
 
         self.assertFalse(resultado)
 
+    def test_executar_ui_ignora_slot_vazio_de_background_task(self):
+        app = IntegracaoEnriquecimentoApp()
+
+        resultado = app._executar_ui(
+            lambda: (_ for _ in ()).throw(
+                RuntimeError("The current slot cannot be determined because the slot stack for this task is empty.")
+            )
+        )
+
+        self.assertFalse(resultado)
+
     def test_executar_ui_propaga_erros_runtime_diferentes(self):
         app = IntegracaoEnriquecimentoApp()
 

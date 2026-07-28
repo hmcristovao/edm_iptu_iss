@@ -652,6 +652,10 @@ class IntegracaoEnriquecimentoApp:
                 return False
             if "parent element" in texto and "deleted" in texto:
                 return False
+            if "current slot cannot be determined" in texto:
+                return False
+            if "slot stack" in texto and "empty" in texto:
+                return False
             raise
 
     def _abrir_logs_processamento(self):
@@ -1028,7 +1032,9 @@ class IntegracaoEnriquecimentoApp:
         return ""
 
     def _agendar_desenho_revisao(self):
-        self._executar_ui(lambda: ui.timer(0.05, self._desenhar_revisao, once=True))
+        agendado = self._executar_ui(lambda: ui.timer(0.05, self._desenhar_revisao, once=True))
+        if not agendado and getattr(self, "area_revisao", None) is not None:
+            self._executar_ui(self._desenhar_revisao)
 
     def _desenhar_revisao(self):
         self.area_revisao.clear()
