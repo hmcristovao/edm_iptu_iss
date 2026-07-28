@@ -23,6 +23,8 @@ from src.views.app_state import AppState
 
 
 class IntegracaoEnriquecimentoApp:
+    TAMANHO_LOTE_GRUPOS_REVISAO = 25
+
     def __init__(self):
         self.paths = AppPaths()
         self.settings = AppSettings()
@@ -685,10 +687,16 @@ class IntegracaoEnriquecimentoApp:
         if "id_revisao" not in df.columns or COLUNA_MERGE_KEY not in df.columns:
             raise ValueError("O arquivo da Etapa 2 não contém as colunas obrigatórias.")
 
-        pares = self.revisao_service.criar_pares_candidatos(df)
         decisoes = self.revisao_service.carregar_decisoes()
+        total_grupos = self.revisao_service.contar_grupos_revisao(df)
+        pares, proximo_offset = self.revisao_service.carregar_lote_pendente(
+            df,
+            decisoes,
+            limite_grupos=self.TAMANHO_LOTE_GRUPOS_REVISAO,
+            offset_grupos=0,
+        )
         indice_atual = self.revisao_service.primeiro_indice_pendente(pares, decisoes)
-        return df, pares, decisoes, indice_atual
+        return df, pares, decisoes, indice_atual, total_grupos, proximo_offset
 
     async def iniciar_revisao(self):
         if self.state.rodando:
@@ -699,7 +707,9 @@ class IntegracaoEnriquecimentoApp:
         self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_enriquecimento}.")
 
         try:
-            df, pares, decisoes, indice_atual = await asyncio.to_thread(self.preparar_revisao)
+            df, pares, decisoes, indice_atual, total_grupos, proximo_offset = await asyncio.to_thread(
+                self.preparar_revisao
+            )
         except (FileNotFoundError, PermissionError, ValueError) as erro:
             self._executar_ui(lambda: ui.notify(str(erro)))
         except Exception as erro:
@@ -709,8 +719,14 @@ class IntegracaoEnriquecimentoApp:
             self.state.pares = pares
             self.state.decisoes = decisoes
             self.state.indice_atual = indice_atual
+            self.state.total_grupos_revisao = total_grupos
+            self.state.offset_grupos_revisao = proximo_offset
             self.state.etapa3_ativa = True
-            self._executar_ui(lambda: ui.notify(f"Revisão carregada com {len(pares)} pares."))
+            self._executar_ui(
+                lambda: ui.notify(
+                    f"Revisão carregada: {len(self._agrupar_pares(pares))} de {total_grupos} grupo(s)."
+                )
+            )
         finally:
             self.state.rodando = False
             self._fechar_bloqueio()
@@ -722,6 +738,9 @@ class IntegracaoEnriquecimentoApp:
     def mudar_indice(self, delta: int):
         total = len(self.state.pares)
         if total == 0:
+            return
+        if delta > 0 and self.state.indice_atual >= total - 1 and self._ha_lotes_revisao_pendentes():
+            asyncio.create_task(self._carregar_mais_revisao(avancar=True))
             return
         self.state.indice_atual = max(0, min(total - 1, self.state.indice_atual + delta))
         self._agendar_desenho_revisao()
@@ -742,19 +761,66 @@ class IntegracaoEnriquecimentoApp:
             decisao,
             observacao,
         )
-        self._proximo_pendente()
+        if not self._proximo_pendente() and self._ha_lotes_revisao_pendentes():
+            asyncio.create_task(self._carregar_mais_revisao(avancar=True))
+            return
         self._agendar_desenho_revisao()
 
-    def _proximo_pendente(self):
+    def _proximo_pendente(self) -> bool:
         inicio = self.state.indice_atual + 1
         for indice in range(inicio, len(self.state.pares)):
             if self.state.pares[indice]["par_id"] not in self.state.decisoes:
                 self.state.indice_atual = indice
-                return
+                return True
         self.state.indice_atual = self.revisao_service.primeiro_indice_pendente(
             self.state.pares,
             self.state.decisoes,
         )
+        if self.state.pares and self.state.pares[self.state.indice_atual]["par_id"] not in self.state.decisoes:
+            return True
+        return False
+
+    def _ha_lotes_revisao_pendentes(self) -> bool:
+        return self.state.offset_grupos_revisao < self.state.total_grupos_revisao
+
+    def _adicionar_pares_revisao(self, novos_pares: list[dict]) -> int:
+        existentes = {par["par_id"] for par in self.state.pares}
+        adicionados = 0
+
+        for par in novos_pares:
+            if par["par_id"] in existentes:
+                continue
+
+            self.state.pares.append(par)
+            existentes.add(par["par_id"])
+            adicionados += 1
+
+        return adicionados
+
+    async def _carregar_mais_revisao(self, avancar: bool = False):
+        if self.state.df is None or self.state.carregando_lote_revisao or not self._ha_lotes_revisao_pendentes():
+            return
+
+        self.state.carregando_lote_revisao = True
+        indice_anterior = self.state.indice_atual
+
+        try:
+            pares, proximo_offset = await asyncio.to_thread(
+                self.revisao_service.carregar_lote_pendente,
+                self.state.df,
+                self.state.decisoes,
+                self.TAMANHO_LOTE_GRUPOS_REVISAO,
+                self.state.offset_grupos_revisao,
+            )
+            self.state.offset_grupos_revisao = proximo_offset
+            adicionados = self._adicionar_pares_revisao(pares)
+
+            if avancar and adicionados:
+                self.state.indice_atual = min(indice_anterior + 1, len(self.state.pares) - 1)
+                self._proximo_pendente()
+        finally:
+            self.state.carregando_lote_revisao = False
+            self._agendar_desenho_revisao()
 
     def solicitar_geracao_arquivo_revisado(self):
         ui.timer(0.05, self.gerar_arquivo_revisado, once=True)
@@ -941,7 +1007,7 @@ class IntegracaoEnriquecimentoApp:
 
     def _contar_pares_pendentes(self) -> int:
         grupos = self._agrupar_pares(self.state.pares)
-        total_pares = len(grupos)
+        total_pares = self.state.total_grupos_revisao or len(grupos)
         pares_decididos = sum(
             1
             for itens in grupos.values()
@@ -983,6 +1049,8 @@ class IntegracaoEnriquecimentoApp:
 
             grupos = self._agrupar_pares(pares)
             self._montar_resumo_revisao(pares, grupos)
+            if self.state.carregando_lote_revisao:
+                ui.label("Carregando prÃ³ximo lote de revisÃ£o...").classes("text-sm text-slate-600")
             self._montar_par_atual(pares, grupos)
 
         self.area_revisao.update()
@@ -994,7 +1062,8 @@ class IntegracaoEnriquecimentoApp:
         return grupos
 
     def _montar_resumo_revisao(self, pares: list[dict], grupos: dict):
-        total_pares = len(grupos)
+        total_carregados = len(grupos)
+        total_pares = self.state.total_grupos_revisao or total_carregados
         pares_decididos = sum(
             1
             for itens in grupos.values()
@@ -1007,6 +1076,7 @@ class IntegracaoEnriquecimentoApp:
         with ui.row().classes("w-full gap-3"):
             for titulo, valor in [
                 ("Pares", total_pares),
+                ("Carregados", total_carregados),
                 ("Pares pendentes", pares_pendentes),
                 ("Pares decididos", pares_decididos),
                 ("Aprovados", aprovados),
@@ -1022,7 +1092,7 @@ class IntegracaoEnriquecimentoApp:
         par = pares[indice]
         ids_ordenados = list(grupos)
         numero_par = ids_ordenados.index(par["id_revisao"]) + 1
-        total_pares = len(grupos)
+        total_pares = self.state.total_grupos_revisao or len(grupos)
         linha_valida = self.state.df.loc[par["idx_valido"]]
         linha_invalida = self.state.df.loc[par["idx_invalido"]]
         decisao_atual = self.state.decisoes.get(par["par_id"], {}).get("decisao", "pendente")

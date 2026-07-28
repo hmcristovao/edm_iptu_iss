@@ -42,6 +42,49 @@ class ServicesModuloIITest(unittest.TestCase):
         self.assertEqual(pares[0]["idx_invalido"], 1)
         self.assertEqual(pares[0]["score_revisao"], "91.5")
 
+    def test_cria_pares_candidatos_por_lote_de_grupos(self):
+        df = pd.DataFrame(
+            {
+                COLUNA_REVISAO: ["G1", "G1", "G2", "G2", "G3", "G3"],
+                COLUNA_MERGE_KEY: ["CPF_1", "", "CPF_2", "", "CPF_3", ""],
+                COLUNA_SCORE_REVISAO: ["", "81", "", "82", "", "83"],
+            }
+        )
+        service = RevisaoService(paths=None)
+
+        primeiro_lote = service.criar_pares_candidatos(df, limite_grupos=2, offset_grupos=0)
+        segundo_lote = service.criar_pares_candidatos(df, limite_grupos=2, offset_grupos=2)
+
+        self.assertEqual([par["par_id"] for par in primeiro_lote], ["G1:0:1", "G2:2:3"])
+        self.assertEqual([par["par_id"] for par in segundo_lote], ["G3:4:5"])
+
+    def test_conta_grupos_de_revisao_validos(self):
+        df = pd.DataFrame(
+            {
+                COLUNA_REVISAO: ["G1", "G1", "G2", "G2", "G3"],
+                COLUNA_MERGE_KEY: ["CPF_1", "", "CPF_2", "", ""],
+            }
+        )
+        service = RevisaoService(paths=None)
+
+        self.assertEqual(service.contar_grupos_revisao(df), 2)
+
+    def test_carrega_lote_pendente_pula_grupos_ja_decididos(self):
+        df = pd.DataFrame(
+            {
+                COLUNA_REVISAO: ["G1", "G1", "G2", "G2", "G3", "G3"],
+                COLUNA_MERGE_KEY: ["CPF_1", "", "CPF_2", "", "CPF_3", ""],
+                COLUNA_SCORE_REVISAO: ["", "81", "", "82", "", "83"],
+            }
+        )
+        decisoes = {"G1:0:1": {"decisao": "aprovar"}}
+        service = RevisaoService(paths=None)
+
+        pares, proximo_offset = service.carregar_lote_pendente(df, decisoes, limite_grupos=1, offset_grupos=0)
+
+        self.assertEqual([par["par_id"] for par in pares], ["G2:2:3"])
+        self.assertEqual(proximo_offset, 2)
+
     def test_aplicar_decisao_aprovada_preenche_vazios_remove_invalido_e_registra_metadados(self):
         df = pd.DataFrame(
             {

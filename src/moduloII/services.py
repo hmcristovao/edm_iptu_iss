@@ -139,13 +139,13 @@ class RevisaoService:
             index=False,
         )
 
-    def criar_pares_candidatos(self, df: pd.DataFrame) -> list[dict]:
+    def _grupos_revisao_validos(self, df: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
         if COLUNA_REVISAO not in df.columns:
             return []
 
-        pares = []
         filtro = df[COLUNA_REVISAO].astype(str).str.strip() != ""
         grupos = df[filtro].groupby(COLUNA_REVISAO, sort=True)
+        grupos_validos = []
 
         for id_revisao, grupo in grupos:
             validos = grupo[grupo[COLUNA_MERGE_KEY].astype(str).str.strip() != ""]
@@ -154,6 +154,29 @@ class RevisaoService:
             if validos.empty or invalidos.empty:
                 continue
 
+            grupos_validos.append((id_revisao, grupo))
+
+        return grupos_validos
+
+    def contar_grupos_revisao(self, df: pd.DataFrame) -> int:
+        return len(self._grupos_revisao_validos(df))
+
+    def criar_pares_candidatos(
+        self,
+        df: pd.DataFrame,
+        limite_grupos: int | None = None,
+        offset_grupos: int = 0,
+    ) -> list[dict]:
+        pares = []
+        grupos = self._grupos_revisao_validos(df)
+
+        if offset_grupos > 0 or limite_grupos is not None:
+            fim = None if limite_grupos is None else offset_grupos + limite_grupos
+            grupos = grupos[offset_grupos:fim]
+
+        for id_revisao, grupo in grupos:
+            validos = grupo[grupo[COLUNA_MERGE_KEY].astype(str).str.strip() != ""]
+            invalidos = grupo[grupo[COLUNA_MERGE_KEY].astype(str).str.strip() == ""]
             idx_valido = validos.index[0]
 
             for idx_invalido in invalidos.index:
@@ -170,6 +193,27 @@ class RevisaoService:
                 )
 
         return pares
+
+    def carregar_lote_pendente(
+        self,
+        df: pd.DataFrame,
+        decisoes: dict[str, dict],
+        limite_grupos: int,
+        offset_grupos: int = 0,
+    ) -> tuple[list[dict], int]:
+        grupos = self._grupos_revisao_validos(df)
+
+        for offset in range(offset_grupos, len(grupos), limite_grupos):
+            pares = self.criar_pares_candidatos(
+                df,
+                limite_grupos=limite_grupos,
+                offset_grupos=offset,
+            )
+            pendentes = [par for par in pares if par["par_id"] not in decisoes]
+            if pendentes:
+                return pares, offset + limite_grupos
+
+        return [], len(grupos)
 
     def primeiro_indice_pendente(self, pares: list[dict], decisoes: dict[str, dict]) -> int:
         for indice, par in enumerate(pares):

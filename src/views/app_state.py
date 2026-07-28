@@ -14,4 +14,7 @@ class AppState:
     pares: list[dict] = field(default_factory=list)
     decisoes: dict[str, dict] = field(default_factory=dict)
     indice_atual: int = 0
+    total_grupos_revisao: int = 0
+    offset_grupos_revisao: int = 0
+    carregando_lote_revisao: bool = False
     arquivo_revisao_atual: str = ""

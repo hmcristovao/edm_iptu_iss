@@ -35,6 +35,33 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
 
         self.assertEqual(app._paginacao_tabela_revisao(), {"rowsPerPage": 20})
 
+    def test_conta_pendentes_considera_grupos_ainda_nao_carregados(self):
+        app = IntegracaoEnriquecimentoApp()
+        app.state.total_grupos_revisao = 3
+        app.state.pares = [
+            {"par_id": "G1:0:1", "id_revisao": "G1"},
+            {"par_id": "G2:2:3", "id_revisao": "G2"},
+        ]
+        app.state.decisoes = {
+            "G1:0:1": {"decisao": "aprovar"},
+            "G2:2:3": {"decisao": "rejeitar"},
+        }
+
+        self.assertEqual(app._contar_pares_pendentes(), 1)
+
+    def test_estende_pares_sem_duplicar(self):
+        app = IntegracaoEnriquecimentoApp()
+        app.state.pares = [{"par_id": "G1:0:1", "id_revisao": "G1"}]
+
+        app._adicionar_pares_revisao(
+            [
+                {"par_id": "G1:0:1", "id_revisao": "G1"},
+                {"par_id": "G2:2:3", "id_revisao": "G2"},
+            ]
+        )
+
+        self.assertEqual([par["par_id"] for par in app.state.pares], ["G1:0:1", "G2:2:3"])
+
 
 if __name__ == "__main__":
     unittest.main()

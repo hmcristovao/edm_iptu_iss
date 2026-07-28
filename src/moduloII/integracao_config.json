@@ -1,5 +1,5 @@
 {
-  "threshold_similaridade": 80,
+  "threshold_similaridade": 90,
   "threshold_revisar": 85,
   "threshold_apoio_nome": 95,
   "threshold_apoio_telefone": 95,

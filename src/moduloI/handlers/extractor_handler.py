@@ -136,7 +136,7 @@ class ExtractorHandler(AbstractHandler):
 
                 elif ext == "csv":
                     df = pd.read_csv(arquivo, sep=parameter.sep, header=parameter.header, encoding='utf-8',
-                                     on_bad_lines='skip')
+                                     on_bad_lines='skip', dtype=str)
 
                 # --- BLINDAGEM FINAL (Evita o erro 'float has no len()') ---
                 if df is not None and not df.empty:
