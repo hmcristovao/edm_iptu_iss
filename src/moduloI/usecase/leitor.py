@@ -56,7 +56,7 @@ class ParameterReader:
             elif lendo_variaveis and ':' in linha_limpa:
                 partes = linha_limpa.split(':', 1)
                 chave = partes[0].strip()
-                campos = [c.strip() for c in partes[1].split(',')]
+                campos = [c.strip() for c in partes[1].split(',') if c.strip()]
                 config['Variables'].append({chave: campos})
 
         # A pasta de entrada passa a ser a pasta onde o TXT está

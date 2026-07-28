@@ -11,12 +11,17 @@ class StandardizationHandler(AbstractHandler):
         self.logger = logging.getLogger(self.__class__.__name__)
     def _renomear_colunas_mapeadas(self, df, lista_mapeamento, sufix):
         self.logger.warning(df.columns)
+        colunas_originais_permitidas = set()
+        colunas_geradas_permitidas = set()
+
         for item in lista_mapeamento:
             for nome_amigavel, colunas_tecnicas in item.items():
+                colunas_originais_permitidas.add(nome_amigavel)
 
                 # 1. Caso Simples: Um único item na lista (Renomeação Direta)
                 if len(colunas_tecnicas) == 1:
                     col_destino = f"{colunas_tecnicas[0]}{sufix[0]}"
+                    colunas_geradas_permitidas.add(col_destino)
                     if nome_amigavel in df.columns:
                         df.rename(columns={nome_amigavel:  col_destino  }, inplace=True)
                         self.logger.info(f"Sucesso: {nome_amigavel} renomeado para {col_destino}")
@@ -36,6 +41,7 @@ class StandardizationHandler(AbstractHandler):
                     serie_limpa = df[nome_amigavel].astype(str).str.replace(r"\D", "", regex=True)
 
                     for col_alvo in colunas_tecnicas:
+                        colunas_geradas_permitidas.add(f"{col_alvo}{sufix[0]}")
                         MultivariablesHanderBuilder().build(df, nome_amigavel,f"{col_alvo}{sufix[0]}")
 
                     # Remove a coluna original após processar as regras de documentos
@@ -45,6 +51,14 @@ class StandardizationHandler(AbstractHandler):
 
                 else:
                     self.logger.error(f"Erro: A chave '{nome_amigavel}' está vazia no mapeamento.")
+
+        colunas_permitidas = colunas_originais_permitidas | colunas_geradas_permitidas
+        if colunas_permitidas:
+            colunas_manter = [coluna for coluna in df.columns if coluna in colunas_permitidas]
+            colunas_remover = [coluna for coluna in df.columns if coluna not in colunas_permitidas]
+            if colunas_remover:
+                self.logger.info(f"Removendo colunas fora do TXT de parametros: {colunas_remover}")
+            df = df[colunas_manter]
 
         return df
     @staticmethod

@@ -9,6 +9,7 @@ from src.moduloI.Domain.Package import Package
 from src.moduloI.Domain.Parameters import Parameters
 from src.moduloI.handlers.adapters.anomizador.anonimizador_reversivel_adaptado import AnonimizadorReversivel
 from src.moduloI.handlers.export_handler import ExportHandler
+from src.moduloI.handlers.standardization_handler import StandardizationHandler
 from src.moduloI.handlers.ultis.MultivariablesHander import MultivariablesHanderBuilder
 from src.moduloI.services import ProcessamentoLegadoService
 from src.moduloI.usecase.leitor import ParameterReader
@@ -33,6 +34,7 @@ class ParameterReaderTest(unittest.TestCase):
                         "Variables:",
                         "nomeContribuinte: nome, nome_social",
                         "cpfCnpj: cpf, cnpj",
+                        "observacao :",
                     ]
                 ),
                 encoding="utf-8",
@@ -60,6 +62,7 @@ class ParameterReaderTest(unittest.TestCase):
             [
                 {"nomeContribuinte": ["nome", "nome_social"]},
                 {"cpfCnpj": ["cpf", "cnpj"]},
+                {"observacao": []},
             ],
         )
 
@@ -116,6 +119,42 @@ class MultivariablesHanderBuilderTest(unittest.TestCase):
 
         self.assertEqual(df["cpfCnpjFonte"].tolist(), ["04252011000110", "52998224725", ""])
         self.assertEqual(df["cpfCnpjValidoFonte"].tolist(), ["S", "S", "N"])
+
+
+class StandardizationHandlerTest(unittest.TestCase):
+    def test_remove_colunas_que_nao_estao_no_txt_de_parametros(self):
+        parametros = Parameters(
+            pasta=".",
+            sep=";",
+            footer=0,
+            header=0,
+            formato="csv",
+            saida=".",
+            sufixo=["Fonte"],
+            variaveis=[
+                {"Nome": ["nome"]},
+                {"CPF/CNPJ": ["cpf", "cpfValido", "cnpj", "cnpjValido"]},
+            ],
+        )
+        dados = pd.DataFrame(
+            {
+                "Nome": ["Ana"],
+                "CPF/CNPJ": ["529.982.247-25"],
+                "Coluna Apagada Do TXT": ["nao deve sair"],
+            }
+        )
+
+        resultado = StandardizationHandler()._renomear_colunas_mapeadas(
+            dados,
+            parametros.variaveis,
+            parametros.sufixo,
+        )
+
+        self.assertEqual(
+            resultado.columns.tolist(),
+            ["nomeFonte", "cpfFonte", "cpfValidoFonte", "cnpjFonte", "cnpjValidoFonte"],
+        )
+        self.assertNotIn("Coluna Apagada Do TXT", resultado.columns)
 
 
 class ExportHandlerTest(unittest.TestCase):
