@@ -1,12 +1,12 @@
 {
-  "threshold_similaridade": 90,
-  "threshold_revisar": 85,
+  "threshold_similaridade": 80,
+  "threshold_revisar": 75,
   "threshold_apoio_nome": 95,
   "threshold_apoio_telefone": 95,
-  "threshold_apoio_email": 98,
-  "threshold_apoio_nascimento": 98,
-  "threshold_apoio_endereco": 98,
-  "threshold_apoio_numero": 100,
+  "threshold_apoio_email": 99,
+  "threshold_apoio_nascimento": 99,
+  "threshold_apoio_endereco": 101,
+  "threshold_apoio_numero": 101,
   "threshold_apoio_identificador_documento": 98,
   "max_pares_por_valor_bloco": 1500000
 }

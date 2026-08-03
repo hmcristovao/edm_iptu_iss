@@ -4,9 +4,10 @@ import pandas as pd
 
 from src.moduloIV.base_imobiliario import (
     COLUNA_CNPJ_VALIDO,
+    COLUNA_CNPJ,
+    COLUNA_CPF,
     COLUNA_CPF_VALIDO,
     COLUNA_CELULAR,
-    COLUNA_DOCUMENTO,
     COLUNA_ENDERECO,
     COLUNA_EMAIL,
     COLUNA_INSCRICAO,
@@ -31,7 +32,8 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
     def test_remove_duplicados_agregando_inscricoes_de_documentos_validos(self):
         df = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["cpf_enc", "cpf_enc", "04252011000110", "04252011000110"],
+                COLUNA_CPF: ["cpf_enc", "cpf_enc", "", ""],
+                COLUNA_CNPJ: ["", "", "04252011000110", "04252011000110"],
                 COLUNA_CPF_VALIDO: ["S", "S", "N", "N"],
                 COLUNA_CNPJ_VALIDO: ["N", "N", "S", "S"],
                 COLUNA_INSCRICAO: ["100", "200", "300", "400"],
@@ -51,7 +53,8 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
     def test_ignora_linhas_com_cpf_e_cnpj_invalidos_na_deduplicacao(self):
         df = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["mesmo", "mesmo"],
+                COLUNA_CPF: ["mesmo", "mesmo"],
+                COLUNA_CNPJ: ["", ""],
                 COLUNA_CPF_VALIDO: ["N", "N"],
                 COLUNA_CNPJ_VALIDO: ["N", "N"],
                 COLUNA_INSCRICAO: ["100", "200"],
@@ -66,7 +69,8 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
     def test_reidentifica_apenas_cpfs_validos(self):
         df = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["cpf_enc", "04252011000110", "erro"],
+                COLUNA_CPF: ["cpf_enc", "", "erro"],
+                COLUNA_CNPJ: ["", "04252011000110", ""],
                 COLUNA_CPF_VALIDO: ["S", "N", "S"],
                 COLUNA_CNPJ_VALIDO: ["N", "S", "N"],
                 COLUNA_INSCRICAO: ["100", "200", "300"],
@@ -77,12 +81,14 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         total = self.service._reidentificar_cpfs(df, anonimizador)
 
         self.assertEqual(total, 1)
-        self.assertEqual(df[COLUNA_DOCUMENTO].tolist(), ["52998224725", "04252011000110", "erro"])
+        self.assertEqual(df[COLUNA_CPF].tolist(), ["52998224725", "", "erro"])
+        self.assertEqual(df[COLUNA_CNPJ].tolist(), ["", "04252011000110", ""])
 
     def test_remove_endereco_imobiliario_da_saida(self):
         df = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["04252011000110"],
+                COLUNA_CPF: [""],
+                COLUNA_CNPJ: ["04252011000110"],
                 COLUNA_ENDERECO: ["Rua A"],
                 COLUNA_INSCRICAO: ["100"],
             }
@@ -91,7 +97,8 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.service._remover_colunas_saida(df)
 
         self.assertNotIn(COLUNA_ENDERECO, df.columns)
-        self.assertIn(COLUNA_DOCUMENTO, df.columns)
+        self.assertIn(COLUNA_CPF, df.columns)
+        self.assertIn(COLUNA_CNPJ, df.columns)
         self.assertIn(COLUNA_INSCRICAO, df.columns)
 
     def test_conta_celular_e_email_preenchidos(self):
@@ -110,17 +117,19 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(self.service._calcular_percentual_enriquecimento(144, 221), 65.16)
         self.assertEqual(self.service._calcular_percentual_enriquecimento(1, 0), 0.0)
 
-    def test_protege_cpfcnpj_como_texto_na_saida(self):
-        df = pd.DataFrame({COLUNA_DOCUMENTO: ["00147611733", "04252011000110", ""]})
+    def test_protege_cpf_e_cnpj_como_texto_na_saida(self):
+        df = pd.DataFrame({COLUNA_CPF: ["00147611733", "", ""], COLUNA_CNPJ: ["", "04252011000110", ""]})
 
         self.service._proteger_documento_saida(df)
 
-        self.assertEqual(df[COLUNA_DOCUMENTO].tolist(), ["\t00147611733", "\t04252011000110", ""])
+        self.assertEqual(df[COLUNA_CPF].tolist(), ["\t00147611733", "", ""])
+        self.assertEqual(df[COLUNA_CNPJ].tolist(), ["", "\t04252011000110", ""])
 
     def test_ordena_registros_validos_antes_dos_invalidos(self):
         df = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["invalido1", "cpf", "invalido2", "cnpj"],
+                COLUNA_CPF: ["invalido1", "cpf", "invalido2", ""],
+                COLUNA_CNPJ: ["", "", "", "cnpj"],
                 COLUNA_CPF_VALIDO: ["N", "S", "N", "N"],
                 COLUNA_CNPJ_VALIDO: ["N", "N", "N", "S"],
                 COLUNA_INSCRICAO: ["1", "2", "3", "4"],
@@ -129,13 +138,15 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
 
         resultado = self.service._ordenar_validos_primeiro(df)
 
-        self.assertEqual(resultado[COLUNA_DOCUMENTO].tolist(), ["cpf", "cnpj", "invalido1", "invalido2"])
+        self.assertEqual(resultado[COLUNA_CPF].tolist(), ["cpf", "", "invalido1", "invalido2"])
+        self.assertEqual(resultado[COLUNA_CNPJ].tolist(), ["", "cnpj", "", ""])
         self.assertEqual(resultado[COLUNA_INSCRICAO].tolist(), ["2", "4", "1", "3"])
 
     def test_enriquece_telefones_e_emails_por_cpf_e_cnpj(self):
         imobiliario = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["52998224725", "04252011000110"],
+                COLUNA_CPF: ["52998224725", ""],
+                COLUNA_CNPJ: ["", "04252011000110"],
                 COLUNA_CPF_VALIDO: ["S", "N"],
                 COLUNA_CNPJ_VALIDO: ["N", "S"],
                 COLUNA_INSCRICAO: ["100", "200"],
@@ -176,7 +187,8 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
     def test_nao_adiciona_telefone_repetido_com_formatacao_diferente(self):
         imobiliario = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["52998224725"],
+                COLUNA_CPF: ["52998224725"],
+                COLUNA_CNPJ: [""],
                 COLUNA_CPF_VALIDO: ["S"],
                 COLUNA_CNPJ_VALIDO: ["N"],
                 COLUNA_INSCRICAO: ["100"],
@@ -199,10 +211,38 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["8177778888"])
         self.assertEqual(imobiliario[f"{PREFIXO_EMAIL_ENRIQUECIDO}1"].tolist(), ["novo@exemplo.com"])
 
+    def test_ignora_telefones_invalidos_no_enriquecimento(self):
+        imobiliario = pd.DataFrame(
+            {
+                COLUNA_CPF: ["52998224725"],
+                COLUNA_CNPJ: [""],
+                COLUNA_CPF_VALIDO: ["S"],
+                COLUNA_CNPJ_VALIDO: ["N"],
+                COLUNA_INSCRICAO: ["100"],
+                COLUNA_CELULAR: [""],
+                COLUNA_EMAIL: [""],
+            }
+        )
+        integracao = pd.DataFrame(
+            {
+                "merge_key": ["CPF_52998224725"],
+                "telefoneSaude": ["- | 0 | 28 | (  )      - | 5229542 | 81999990000"],
+                "emailSaude": [""],
+            }
+        )
+
+        telefones, emails = self.service._enriquecer_contatos(imobiliario, integracao)
+
+        self.assertEqual(telefones, 1)
+        self.assertEqual(emails, 0)
+        self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["81999990000"])
+        self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}2", imobiliario.columns)
+
     def test_nao_enriquece_contato_de_linha_pendente_de_revisao_humana(self):
         imobiliario = pd.DataFrame(
             {
-                COLUNA_DOCUMENTO: ["52998224725"],
+                COLUNA_CPF: ["52998224725"],
+                COLUNA_CNPJ: [""],
                 COLUNA_CPF_VALIDO: ["S"],
                 COLUNA_CNPJ_VALIDO: ["N"],
                 COLUNA_INSCRICAO: ["100"],
@@ -228,10 +268,40 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}1", imobiliario.columns)
         self.assertNotIn(f"{PREFIXO_EMAIL_ENRIQUECIDO}1", imobiliario.columns)
 
+    def test_enriquecimento_usa_apenas_merge_key_como_chave_da_integracao(self):
+        imobiliario = pd.DataFrame(
+            {
+                COLUNA_CPF: ["52998224725"],
+                COLUNA_CNPJ: [""],
+                COLUNA_CPF_VALIDO: ["S"],
+                COLUNA_CNPJ_VALIDO: ["N"],
+                COLUNA_INSCRICAO: ["100"],
+                COLUNA_CELULAR: [""],
+                COLUNA_EMAIL: [""],
+            }
+        )
+        integracao = pd.DataFrame(
+            {
+                "merge_key": [""],
+                "cpfSaude": ["52998224725"],
+                "cnpjCNPJ_receita": ["04252011000110"],
+                "telefoneSaude": ["81999990000"],
+                "emailSaude": ["ana@exemplo.com"],
+            }
+        )
+
+        telefones, emails = self.service._enriquecer_contatos(imobiliario, integracao)
+
+        self.assertEqual(telefones, 0)
+        self.assertEqual(emails, 0)
+        self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}1", imobiliario.columns)
+        self.assertNotIn(f"{PREFIXO_EMAIL_ENRIQUECIDO}1", imobiliario.columns)
+
     def test_move_colunas_de_rastreio_para_o_final_da_tabela(self):
         df = pd.DataFrame(
             columns=[
-                COLUNA_DOCUMENTO,
+                COLUNA_CPF,
+                COLUNA_CNPJ,
                 f"{PREFIXO_TELEFONE_ENRIQUECIDO}1",
                 f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_origem",
                 f"{PREFIXO_TELEFONE_ENRIQUECIDO}1_id_revisao",

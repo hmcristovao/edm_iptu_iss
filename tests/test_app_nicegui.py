@@ -1,4 +1,9 @@
 import unittest
+import os
+from contextlib import redirect_stderr
+from io import StringIO
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from src.views.app_nicegui import IntegracaoEnriquecimentoApp
 
@@ -72,6 +77,47 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         )
 
         self.assertEqual([par["par_id"] for par in app.state.pares], ["G1:0:1", "G2:2:3"])
+
+    def test_imprime_erro_modulo_iv_no_terminal(self):
+        app = IntegracaoEnriquecimentoApp()
+        saida = StringIO()
+
+        with redirect_stderr(saida):
+            app._imprimir_erro_modulo_iv("traceback do modulo iv")
+
+        self.assertIn("Erro ao gerar a base imobiliaria", saida.getvalue())
+        self.assertIn("traceback do modulo iv", saida.getvalue())
+
+
+class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
+    async def test_reidentificacao_roda_em_subprocesso_pelo_pipeline_runner(self):
+        app = IntegracaoEnriquecimentoApp()
+        chamadas = {}
+
+        class FakePipelineRunner:
+            async def executar(self, script, ao_progredir):
+                chamadas["script"] = script
+                ao_progredir(
+                    'RESULTADO_REIDENTIFICACAO_JSON={"valores_reidentificados": 7, "saida": "arquivos_gerados/integracao_reidentificada.csv"}'
+                )
+                return 0
+
+        app.chave_legado_input = SimpleNamespace(value="12345678")
+        app.pipeline_runner = FakePipelineRunner()
+        app.reidentificacao_service.reidentificar = lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("nao deve rodar no processo da interface")
+        )
+        app._arquivo_revisao_existente = lambda: "arquivos_gerados/integracao_parcial.csv"
+        app._abrir_loading = lambda *args: None
+        app._atualizar_loading = lambda *args: None
+        app._fechar_bloqueio = lambda: None
+        app._atualizar_botoes = lambda: None
+
+        with patch("src.views.app_nicegui.ui.notify"), patch("src.views.app_nicegui.ui.download") as download:
+            await app.reidentificar_base()
+
+        self.assertEqual(chamadas["script"], os.path.join("..", "moduloIII", "reassociacao.py"))
+        download.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ import json
 import os
 import queue
 import socket
+import sys
+import traceback
 
 from nicegui import ui
 
@@ -39,6 +41,7 @@ class IntegracaoEnriquecimentoApp:
         self.campos_config = {}
         self.progresso_estimado = 0
         self.saida_execucao_atual = []
+        self.linhas_revisao_cache = {}
 
     def run(self):
         self._configurar_tema()
@@ -687,7 +690,7 @@ class IntegracaoEnriquecimentoApp:
         if not self.paths.existe(self.paths.arquivo_enriquecimento):
             raise FileNotFoundError(f"Arquivo não encontrado: {self.paths.arquivo_enriquecimento}.")
 
-        df = self.revisao_service.carregar_dados()
+        df = self.revisao_service.carregar_dados_controle()
         if "id_revisao" not in df.columns or COLUNA_MERGE_KEY not in df.columns:
             raise ValueError("O arquivo da Etapa 2 não contém as colunas obrigatórias.")
 
@@ -699,19 +702,21 @@ class IntegracaoEnriquecimentoApp:
             limite_grupos=self.TAMANHO_LOTE_GRUPOS_REVISAO,
             offset_grupos=0,
         )
+        linhas_cache = self.revisao_service.carregar_linhas_por_indices(self._indices_pares_revisao(pares))
         indice_atual = self.revisao_service.primeiro_indice_pendente(pares, decisoes)
-        return df, pares, decisoes, indice_atual, total_grupos, proximo_offset
+        return df, pares, decisoes, indice_atual, total_grupos, proximo_offset, linhas_cache
 
     async def iniciar_revisao(self):
         if self.state.rodando:
             return
 
+        self.linhas_revisao_cache = {}
         self.state.rodando = True
         self._atualizar_botoes()
         self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_enriquecimento}.")
 
         try:
-            df, pares, decisoes, indice_atual, total_grupos, proximo_offset = await asyncio.to_thread(
+            df, pares, decisoes, indice_atual, total_grupos, proximo_offset, linhas_cache = await asyncio.to_thread(
                 self.preparar_revisao
             )
         except (FileNotFoundError, PermissionError, ValueError) as erro:
@@ -726,6 +731,7 @@ class IntegracaoEnriquecimentoApp:
             self.state.total_grupos_revisao = total_grupos
             self.state.offset_grupos_revisao = proximo_offset
             self.state.etapa3_ativa = True
+            self._atualizar_cache_linhas_revisao(linhas_cache)
             self._executar_ui(
                 lambda: ui.notify(
                     f"Revisão carregada: {len(self._agrupar_pares(pares))} de {total_grupos} grupo(s)."
@@ -787,6 +793,23 @@ class IntegracaoEnriquecimentoApp:
     def _ha_lotes_revisao_pendentes(self) -> bool:
         return self.state.offset_grupos_revisao < self.state.total_grupos_revisao
 
+    def _indices_pares_revisao(self, pares: list[dict]) -> set[int]:
+        indices = set()
+        for par in pares:
+            indices.add(int(par["idx_valido"]))
+            indices.add(int(par["idx_invalido"]))
+        return indices
+
+    def _atualizar_cache_linhas_revisao(self, linhas):
+        for indice, linha in linhas.iterrows():
+            self.linhas_revisao_cache[int(indice)] = linha
+
+    def _linha_revisao(self, indice: int):
+        indice = int(indice)
+        if indice in self.linhas_revisao_cache:
+            return self.linhas_revisao_cache[indice]
+        return self.state.df.loc[indice]
+
     def _adicionar_pares_revisao(self, novos_pares: list[dict]) -> int:
         existentes = {par["par_id"] for par in self.state.pares}
         adicionados = 0
@@ -817,6 +840,11 @@ class IntegracaoEnriquecimentoApp:
                 self.state.offset_grupos_revisao,
             )
             self.state.offset_grupos_revisao = proximo_offset
+            linhas_cache = await asyncio.to_thread(
+                self.revisao_service.carregar_linhas_por_indices,
+                self._indices_pares_revisao(pares),
+            )
+            self._atualizar_cache_linhas_revisao(linhas_cache)
             adicionados = self._adicionar_pares_revisao(pares)
 
             if avancar and adicionados:
@@ -845,9 +873,10 @@ class IntegracaoEnriquecimentoApp:
         self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão humana.")
 
         try:
+            df_completo = await asyncio.to_thread(self.revisao_service.carregar_dados)
             await asyncio.to_thread(
                 self.revisao_service.salvar_arquivo_revisado,
-                self.state.df,
+                df_completo,
                 self.state.decisoes,
                 arquivo_saida,
             )
@@ -896,26 +925,45 @@ class IntegracaoEnriquecimentoApp:
         self.state.rodando = True
         self._atualizar_botoes()
         self._abrir_loading("Reidentificando Base...", f"Lendo {arquivo_entrada}.")
+        self.saida_execucao_atual = []
+        chave_anterior = os.environ.get("key")
+        os.environ["key"] = chave
 
         try:
-            resultado = await asyncio.to_thread(
-                self.reidentificacao_service.reidentificar,
-                chave,
-                arquivo_entrada,
+            def ao_progredir(linha: str):
+                if not linha.strip():
+                    return
+                self.saida_execucao_atual.append(linha)
+                self._atualizar_loading("Reidentificacao: Executando...", linha, 50)
+
+            codigo = await self.pipeline_runner.executar(
+                os.path.join("..", "moduloIII", "reassociacao.py"),
+                ao_progredir,
             )
+            if codigo != 0:
+                ultimas_linhas = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
+                ui.notify("Erro ao reidentificar a base.")
+                self._atualizar_loading("Reidentificação: Erro", ultimas_linhas, 0)
+                return
+
+            resultado = self._extrair_resultado_reidentificacao()
         except Exception as erro:
             ui.notify(f"Erro ao reidentificar a base: {erro}")
             self._atualizar_loading("Reidentificação: Erro", str(erro), 0)
         else:
             mensagem = (
-                f"{resultado.valores_reidentificados} valor(es) reidentificado(s). "
-                f"Arquivo salvo em {resultado.saida}."
+                f"{resultado.get('valores_reidentificados', 0)} valor(es) reidentificado(s). "
+                f"Arquivo salvo em {resultado.get('saida', self.paths.arquivo_integracao_reidentificada)}."
             )
             self._atualizar_loading("Reidentificação: 100%", mensagem, 100)
             ui.notify(mensagem)
-            caminho = self.paths.resolver(resultado.saida)
+            caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_integracao_reidentificada))
             ui.download(str(caminho), filename=caminho.name)
         finally:
+            if chave_anterior is None:
+                os.environ.pop("key", None)
+            else:
+                os.environ["key"] = chave_anterior
             self.state.rodando = False
             self._fechar_bloqueio()
             self._atualizar_botoes()
@@ -959,6 +1007,8 @@ class IntegracaoEnriquecimentoApp:
 
             if codigo != 0:
                 ultimas_linhas = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
+                erro_terminal = "\n".join(self.saida_execucao_atual) or ultimas_linhas
+                self._imprimir_erro_modulo_iv(erro_terminal)
                 self._executar_ui(lambda: ui.notify("Erro ao gerar a base imobiliária."))
                 self._atualizar_loading("Base Imobiliária: Erro", ultimas_linhas, 0)
                 return
@@ -978,6 +1028,7 @@ class IntegracaoEnriquecimentoApp:
             caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_base_imobiliario_modulo_iv))
             self._executar_ui(lambda: ui.download(str(caminho), filename=caminho.name))
         except Exception as erro:
+            self._imprimir_erro_modulo_iv(traceback.format_exc())
             self._executar_ui(lambda: ui.notify(f"Erro ao gerar a base imobiliária: {erro}"))
             self._atualizar_loading("Base Imobiliária: Erro", str(erro), 0)
         finally:
@@ -995,6 +1046,17 @@ class IntegracaoEnriquecimentoApp:
             if linha.startswith(prefixo):
                 return json.loads(linha[len(prefixo):])
         return {}
+
+    def _extrair_resultado_reidentificacao(self) -> dict:
+        prefixo = "RESULTADO_REIDENTIFICACAO_JSON="
+        for linha in reversed(self.saida_execucao_atual):
+            if linha.startswith(prefixo):
+                return json.loads(linha[len(prefixo):])
+        return {}
+
+    def _imprimir_erro_modulo_iv(self, erro: str):
+        print("\nErro ao gerar a base imobiliaria.", file=sys.stderr)
+        print(str(erro).strip() or "Erro sem detalhes.", file=sys.stderr)
 
     def _formatar_percentual(self, valor) -> str:
         try:
@@ -1099,8 +1161,8 @@ class IntegracaoEnriquecimentoApp:
         ids_ordenados = list(grupos)
         numero_par = ids_ordenados.index(par["id_revisao"]) + 1
         total_pares = self.state.total_grupos_revisao or len(grupos)
-        linha_valida = self.state.df.loc[par["idx_valido"]]
-        linha_invalida = self.state.df.loc[par["idx_invalido"]]
+        linha_valida = self._linha_revisao(par["idx_valido"])
+        linha_invalida = self._linha_revisao(par["idx_invalido"])
         decisao_atual = self.state.decisoes.get(par["par_id"], {}).get("decisao", "pendente")
         observacao_atual = self.state.decisoes.get(par["par_id"], {}).get("observacao", "")
 

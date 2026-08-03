@@ -1,4 +1,5 @@
 import unittest
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 
@@ -10,6 +11,7 @@ from src.moduloII.app_config import (
     COLUNA_REVISAO,
     COLUNA_SCORE_REVISAO,
     COLUNA_USUARIO_REVISAO,
+    AppPaths,
 )
 from src.moduloII.services import RevisaoService, extrair_porcentagem, texto_valor, valor_vazio
 from src.moduloII import enriquecimento
@@ -84,6 +86,45 @@ class ServicesModuloIITest(unittest.TestCase):
 
         self.assertEqual([par["par_id"] for par in pares], ["G2:2:3"])
         self.assertEqual(proximo_offset, 2)
+
+    def test_carrega_dados_controle_sem_ler_colunas_extras(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            paths.garantir_pasta_arquivo(paths.arquivo_enriquecimento)
+            pd.DataFrame(
+                {
+                    COLUNA_REVISAO: ["G1"],
+                    COLUNA_MERGE_KEY: ["CPF_00123456789"],
+                    COLUNA_SCORE_REVISAO: ["91"],
+                    "coluna_pesada": ["x" * 100],
+                }
+            ).to_csv(paths.resolver(paths.arquivo_enriquecimento), sep=";", encoding="utf-8-sig", index=False)
+
+            df = RevisaoService(paths).carregar_dados_controle()
+
+        self.assertEqual(df.columns.tolist(), [COLUNA_REVISAO, COLUNA_MERGE_KEY, COLUNA_SCORE_REVISAO])
+        self.assertEqual(df.at[0, COLUNA_MERGE_KEY], "CPF_00123456789")
+
+    def test_carrega_linhas_por_indices_preserva_indices_originais(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            paths.garantir_pasta_arquivo(paths.arquivo_enriquecimento)
+            pd.DataFrame(
+                {
+                    COLUNA_REVISAO: ["G1", "G1", "G2"],
+                    COLUNA_MERGE_KEY: ["CPF_1", "", "CPF_2"],
+                    "cpf": ["00123456789", "", "00987654321"],
+                    "nome": ["Ana", "Ana Silva", "Bia"],
+                }
+            ).to_csv(paths.resolver(paths.arquivo_enriquecimento), sep=";", encoding="utf-8-sig", index=False)
+
+            df = RevisaoService(paths).carregar_linhas_por_indices({0, 2})
+
+        self.assertEqual(df.index.tolist(), [0, 2])
+        self.assertEqual(df.at[0, "cpf"], "00123456789")
+        self.assertEqual(df.at[2, "nome"], "Bia")
 
     def test_aplicar_decisao_aprovada_preenche_vazios_remove_invalido_e_registra_metadados(self):
         df = pd.DataFrame(
@@ -163,6 +204,16 @@ class ServicesModuloIITest(unittest.TestCase):
         self.assertIn("match_automatico", resultado.columns)
         self.assertEqual(resultado.index.tolist(), [(10, 20)])
         self.assertTrue(resultado.iloc[0]["match_automatico"])
+
+    def test_workers_de_comparacao_tem_limite_conservador(self):
+        limite_original = enriquecimento.MAX_WORKERS_COMPARACAO
+        try:
+            enriquecimento.MAX_WORKERS_COMPARACAO = 2
+
+            self.assertEqual(enriquecimento.definir_workers_comparacao(1), 1)
+            self.assertEqual(enriquecimento.definir_workers_comparacao(10), 2)
+        finally:
+            enriquecimento.MAX_WORKERS_COMPARACAO = limite_original
 
 
 if __name__ == "__main__":

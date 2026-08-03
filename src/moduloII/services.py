@@ -1,4 +1,5 @@
 import asyncio
+import csv
 import json
 import os
 import re
@@ -103,6 +104,9 @@ class EntradaService:
 class RevisaoService:
     def __init__(self, paths: AppPaths):
         self.paths = paths
+        self._assinatura_indice_linhas = None
+        self._cabecalho_linhas = []
+        self._offsets_linhas = []
 
     def carregar_dados(self) -> pd.DataFrame:
         return pd.read_csv(
@@ -111,6 +115,67 @@ class RevisaoService:
             encoding="utf-8-sig",
             dtype=str,
         ).fillna("")
+
+    def carregar_dados_controle(self) -> pd.DataFrame:
+        colunas_controle = {COLUNA_REVISAO, COLUNA_MERGE_KEY, COLUNA_SCORE_REVISAO}
+        return pd.read_csv(
+            self.paths.resolver(self.paths.arquivo_enriquecimento),
+            sep=";",
+            encoding="utf-8-sig",
+            dtype=str,
+            usecols=lambda coluna: coluna in colunas_controle,
+        ).fillna("")
+
+    def carregar_linhas_por_indices(self, indices: set[int]) -> pd.DataFrame:
+        if not indices:
+            return pd.DataFrame()
+
+        self._garantir_indice_linhas_revisao()
+        alvo = set(int(indice) for indice in indices)
+        linhas = {}
+
+        with open(self.paths.resolver(self.paths.arquivo_enriquecimento), "rb") as arquivo:
+            for indice in sorted(alvo):
+                if indice < 0 or indice >= len(self._offsets_linhas):
+                    continue
+
+                arquivo.seek(self._offsets_linhas[indice])
+                linha_texto = arquivo.readline().decode("utf-8").rstrip("\r\n")
+                valores = next(csv.reader([linha_texto], delimiter=";"), [])
+                linhas[indice] = {
+                    coluna: texto_valor(valores[posicao]) if posicao < len(valores) else ""
+                    for posicao, coluna in enumerate(self._cabecalho_linhas)
+                }
+
+        if not linhas:
+            return pd.DataFrame()
+
+        return pd.DataFrame.from_dict(linhas, orient="index").sort_index().fillna("")
+
+    def _garantir_indice_linhas_revisao(self) -> None:
+        caminho = self.paths.resolver(self.paths.arquivo_enriquecimento)
+        stat = caminho.stat()
+        assinatura = (str(caminho), stat.st_size, stat.st_mtime_ns)
+
+        if self._assinatura_indice_linhas == assinatura:
+            return
+
+        offsets = []
+        with open(caminho, "rb") as arquivo:
+            cabecalho_bytes = arquivo.readline()
+            cabecalho_texto = cabecalho_bytes.decode("utf-8-sig").rstrip("\r\n")
+            cabecalho = next(csv.reader([cabecalho_texto], delimiter=";"), [])
+
+            while True:
+                offset = arquivo.tell()
+                linha = arquivo.readline()
+                if not linha:
+                    break
+                offsets.append(offset)
+
+        self._assinatura_indice_linhas = assinatura
+        self._cabecalho_linhas = cabecalho
+        self._offsets_linhas = offsets
 
     def carregar_decisoes(self) -> dict[str, dict]:
         if not self.paths.existe(self.paths.arquivo_decisoes):

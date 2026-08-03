@@ -1,7 +1,9 @@
+import json
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 if __package__ in {None, ""}:
     sys.path.append(str(Path(__file__).resolve().parents[2]))
@@ -20,6 +22,15 @@ class ResultadoReidentificacao:
     valores_reidentificados: int
 
 
+def resultado_reidentificacao_payload(resultado: ResultadoReidentificacao) -> dict:
+    return {
+        "entrada": resultado.entrada,
+        "saida": resultado.saida,
+        "total_colunas_reidentificadas": len(resultado.colunas_reidentificadas),
+        "valores_reidentificados": resultado.valores_reidentificados,
+    }
+
+
 class ReidentificacaoService:
     def __init__(self, paths: AppPaths):
         self.paths = paths
@@ -29,6 +40,7 @@ class ReidentificacaoService:
         chave: str,
         arquivo_entrada: str | None = None,
         arquivo_saida: str | None = None,
+        registrar_progresso: Callable[[str], None] | None = None,
     ) -> ResultadoReidentificacao:
         if not chave:
             raise ValueError("Informe a chave usada na pseudonimização.")
@@ -43,21 +55,26 @@ class ReidentificacaoService:
         if not caminho_entrada.exists():
             raise FileNotFoundError(f"Arquivo não encontrado: {entrada}.")
 
+        self._registrar(registrar_progresso, f"Lendo {entrada}.")
         os.environ["key"] = chave
         anonimizador = AnonimizadorReversivel()
 
         df = pd.read_csv(caminho_entrada, sep=";", encoding="utf-8-sig", dtype=str).fillna("")
+        self._registrar(registrar_progresso, f"Arquivo carregado: {len(df)} linha(s), {len(df.columns)} coluna(s).")
         colunas = self._colunas_cpf(df)
         total = 0
 
-        for coluna in colunas:
+        for indice, coluna in enumerate(colunas, start=1):
+            self._registrar(registrar_progresso, f"Reidentificando CPF {indice}/{len(colunas)}: {coluna}.")
             df[coluna], quantidade = self._decriptografar_serie(df[coluna], anonimizador)
             total += quantidade
 
         if COLUNA_MERGE_KEY in df.columns:
+            self._registrar(registrar_progresso, f"Reidentificando {COLUNA_MERGE_KEY}.")
             df[COLUNA_MERGE_KEY], quantidade = self._decriptografar_merge_key(df[COLUNA_MERGE_KEY], anonimizador)
             total += quantidade
 
+        self._registrar(registrar_progresso, f"Salvando {saida}.")
         self.paths.garantir_pasta_arquivo(saida)
         df.to_csv(self.paths.resolver(saida), sep=";", encoding="utf-8-sig", index=False)
 
@@ -67,6 +84,10 @@ class ReidentificacaoService:
             colunas_reidentificadas=colunas,
             valores_reidentificados=total,
         )
+
+    def _registrar(self, registrar_progresso: Callable[[str], None] | None, mensagem: str) -> None:
+        if registrar_progresso:
+            registrar_progresso(mensagem)
 
     def _arquivo_entrada_padrao(self) -> str:
         if self.paths.existe(self.paths.arquivo_integracao_final):
@@ -129,10 +150,17 @@ class ReidentificacaoService:
 
 def main():
     chave = os.environ.get("key") or os.environ.get("APP_CHAVE_PSEUDONIMIZACAO", "")
-    resultado = ReidentificacaoService(AppPaths()).reidentificar(chave)
+    resultado = ReidentificacaoService(AppPaths()).reidentificar(
+        chave,
+        registrar_progresso=lambda linha: print(linha, flush=True),
+    )
     print(
         "Reidentificação concluída: "
         f"{resultado.valores_reidentificados} valor(es), saída {resultado.saida}."
+    )
+    print(
+        f"RESULTADO_REIDENTIFICACAO_JSON={json.dumps(resultado_reidentificacao_payload(resultado), ensure_ascii=False)}",
+        flush=True,
     )
 
 

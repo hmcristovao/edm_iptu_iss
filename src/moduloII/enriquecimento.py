@@ -118,7 +118,7 @@ THRESHOLD_APOIO_NUMERO = 100
 THRESHOLD_APOIO_IDENTIFICADOR_DOCUMENTO = 98
 
 MAX_PARES_POR_VALOR_BLOCO = 1500000
-MAX_WORKERS_COMPARACAO = max(1, (os.cpu_count() or 2) - 1)
+MAX_WORKERS_COMPARACAO = min(6, max(1, (os.cpu_count() or 2) - 1))
 
 _PERFIS_INVALIDOS_WORKER = None
 _PERFIS_VALIDOS_WORKER = None
@@ -135,6 +135,7 @@ def aplicar_configuracao_externa():
     global THRESHOLD_APOIO_NUMERO
     global THRESHOLD_APOIO_IDENTIFICADOR_DOCUMENTO
     global MAX_PARES_POR_VALOR_BLOCO
+    global MAX_WORKERS_COMPARACAO
 
     try:
         with open(os.path.join(CODE_DIR, ARQUIVO_CONFIGURACAO), "r", encoding="utf-8") as arquivo:
@@ -157,6 +158,7 @@ def aplicar_configuracao_externa():
         config.get("threshold_apoio_identificador_documento", THRESHOLD_APOIO_IDENTIFICADOR_DOCUMENTO)
     )
     MAX_PARES_POR_VALOR_BLOCO = int(config.get("max_pares_por_valor_bloco", MAX_PARES_POR_VALOR_BLOCO))
+    MAX_WORKERS_COMPARACAO = max(1, int(config.get("max_workers_comparacao", MAX_WORKERS_COMPARACAO)))
 
     print(f"Configuracao carregada de {ARQUIVO_CONFIGURACAO}")
 
@@ -771,6 +773,51 @@ def definir_workers_comparacao(total_lotes: int) -> int:
     return max(1, min(total_lotes, MAX_WORKERS_COMPARACAO))
 
 
+def limpar_acumuladores_comparacao(
+    matches_list: list[pd.DataFrame],
+    linhas_revisao: set,
+    melhor_score_por_invalido: dict,
+    pares_revisao: dict,
+) -> None:
+    matches_list.clear()
+    linhas_revisao.clear()
+    melhor_score_por_invalido.clear()
+    pares_revisao.clear()
+
+
+def comparar_lotes_em_modo_sequencial(
+    lotes_pares: list[pd.MultiIndex],
+    total_lotes: int,
+    perfis_invalidos_comparacao: pd.DataFrame,
+    perfis_validos_comparacao: pd.DataFrame,
+    matches_list: list[pd.DataFrame],
+    linhas_revisao: set,
+    melhor_score_por_invalido: dict,
+    pares_revisao: dict,
+) -> None:
+    for chunk in tqdm(
+        lotes_pares,
+        total=total_lotes,
+        desc="Calculando similaridade",
+        unit="lote",
+        file=sys.stdout,
+        dynamic_ncols=False,
+        mininterval=1,
+    ):
+        features_chunk = comparar_lote_pares(
+            chunk,
+            perfis_invalidos_comparacao,
+            perfis_validos_comparacao,
+        )
+        acumular_resultado_comparacao(
+            features_chunk,
+            matches_list,
+            linhas_revisao,
+            melhor_score_por_invalido,
+            pares_revisao,
+        )
+
+
 def acumular_resultado_comparacao(
     features_chunk: pd.DataFrame,
     matches_list: list[pd.DataFrame],
@@ -1028,51 +1075,62 @@ def comparar_e_juntar(df_validos: pd.DataFrame, df_invalidos: pd.DataFrame):
 
     if max_workers > 1:
         print(f"  Usando ProcessPoolExecutor com {max_workers} processo(s).")
-        with ProcessPoolExecutor(
-            max_workers=max_workers,
-            initializer=inicializar_worker_comparacao,
-            initargs=(perfis_invalidos_comparacao, perfis_validos_comparacao),
-        ) as executor:
-            barra_features = tqdm(
-                executor.map(comparar_lote_pares_worker, lotes_pares),
-                total=total_lotes,
-                desc="Calculando similaridade",
-                unit="lote",
-                file=sys.stdout,
-                dynamic_ncols=False,
-                mininterval=1,
-            )
-
-            for features_chunk in barra_features:
-                acumular_resultado_comparacao(
-                    features_chunk,
-                    matches_list,
-                    linhas_revisao,
-                    melhor_score_por_invalido,
-                    pares_revisao,
+        try:
+            with ProcessPoolExecutor(
+                max_workers=max_workers,
+                initializer=inicializar_worker_comparacao,
+                initargs=(perfis_invalidos_comparacao, perfis_validos_comparacao),
+            ) as executor:
+                barra_features = tqdm(
+                    executor.map(comparar_lote_pares_worker, lotes_pares),
+                    total=total_lotes,
+                    desc="Calculando similaridade",
+                    unit="lote",
+                    file=sys.stdout,
+                    dynamic_ncols=False,
+                    mininterval=1,
                 )
-    else:
-        for chunk in tqdm(
-            lotes_pares,
-            total=total_lotes,
-            desc="Calculando similaridade",
-            unit="lote",
-            file=sys.stdout,
-            dynamic_ncols=False,
-            mininterval=1,
-        ):
-            features_chunk = comparar_lote_pares(
-                chunk,
-                perfis_invalidos_comparacao,
-                perfis_validos_comparacao,
+
+                for features_chunk in barra_features:
+                    acumular_resultado_comparacao(
+                        features_chunk,
+                        matches_list,
+                        linhas_revisao,
+                        melhor_score_por_invalido,
+                        pares_revisao,
+                    )
+        except Exception as erro:
+            print(
+                "  ProcessPoolExecutor falhou "
+                f"({type(erro).__name__}: {erro}). Reprocessando em modo sequencial."
             )
-            acumular_resultado_comparacao(
-                features_chunk,
+            limpar_acumuladores_comparacao(
                 matches_list,
                 linhas_revisao,
                 melhor_score_por_invalido,
                 pares_revisao,
             )
+            comparar_lotes_em_modo_sequencial(
+                lotes_pares,
+                total_lotes,
+                perfis_invalidos_comparacao,
+                perfis_validos_comparacao,
+                matches_list,
+                linhas_revisao,
+                melhor_score_por_invalido,
+                pares_revisao,
+            )
+    else:
+        comparar_lotes_em_modo_sequencial(
+            lotes_pares,
+            total_lotes,
+            perfis_invalidos_comparacao,
+            perfis_validos_comparacao,
+            matches_list,
+            linhas_revisao,
+            melhor_score_por_invalido,
+            pares_revisao,
+        )
 
     if matches_list:
         matches = pd.concat(matches_list).sort_values(by="score_total", ascending=False)

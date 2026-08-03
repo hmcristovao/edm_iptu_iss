@@ -20,7 +20,8 @@ from src.moduloII.app_config import (
 from src.moduloII.enriquecimento import PARAMETROS_COMPARACAO
 
 
-COLUNA_DOCUMENTO = "cpfCnpjImobiliario"
+COLUNA_CPF = "cpfImobiliario"
+COLUNA_CNPJ = "cnpjImobiliario"
 COLUNA_CPF_VALIDO = "cpfValidoImobiliario"
 COLUNA_CNPJ_VALIDO = "cnpjValidoImobiliario"
 COLUNA_INSCRICAO = "inscricaoImobiliario"
@@ -186,12 +187,9 @@ class BaseImobiliarioModuloIVService:
         )
 
     def _colunas_documento_integracao(self, df: pd.DataFrame) -> list[str]:
-        colunas = []
-        for coluna in df.columns:
-            nome = str(coluna).lower()
-            if nome == COLUNA_MERGE_KEY or (("cpf" in nome or "cnpj" in nome) and "valid" not in nome):
-                colunas.append(coluna)
-        return colunas
+        if COLUNA_MERGE_KEY in df.columns:
+            return [COLUNA_MERGE_KEY]
+        return []
 
     def _chaves_documento_integracao(self, linha: pd.Series, colunas_documento: list[str]) -> list[str]:
         chaves = []
@@ -244,6 +242,8 @@ class BaseImobiliarioModuloIVService:
         for coluna in colunas:
             for parte in str(linha.get(coluna, "")).split("|"):
                 texto = self._texto(parte)
+                if self._coluna_telefone(coluna) and not self._telefone_valido(texto):
+                    continue
                 if texto:
                     contatos.append(
                         ContatoRastreado(
@@ -255,6 +255,21 @@ class BaseImobiliarioModuloIVService:
                         )
                     )
         return self._novos_contatos(contatos, [])
+
+    def _coluna_telefone(self, coluna: str) -> bool:
+        parametro = next(item for item in PARAMETROS_COMPARACAO if item["nome"] == "telefone")
+        return bool(re.search(parametro["padrao_colunas"], str(coluna), re.IGNORECASE))
+
+    def _telefone_valido(self, valor) -> bool:
+        texto = self._texto(valor)
+        if not texto:
+            return False
+
+        digitos = re.sub(r"\D", "", texto)
+        if digitos.startswith("55") and len(digitos) in {12, 13}:
+            digitos = digitos[2:]
+
+        return len(digitos) >= 8
 
     def _novos_contatos(
         self,
@@ -362,25 +377,27 @@ class BaseImobiliarioModuloIVService:
     def _validar_colunas_obrigatorias(self, df: pd.DataFrame) -> None:
         ausentes = [
             coluna
-            for coluna in [COLUNA_DOCUMENTO, COLUNA_CPF_VALIDO, COLUNA_CNPJ_VALIDO, COLUNA_INSCRICAO]
+            for coluna in [COLUNA_CPF, COLUNA_CNPJ, COLUNA_CPF_VALIDO, COLUNA_CNPJ_VALIDO, COLUNA_INSCRICAO]
             if coluna not in df.columns
         ]
         if ausentes:
             raise ValueError(f"Coluna(s) obrigatoria(s) ausente(s): {', '.join(ausentes)}.")
 
     def _chave_documento_linha(self, linha: pd.Series) -> str:
-        documento = self._texto(linha.get(COLUNA_DOCUMENTO, ""))
-        if not documento:
-            return ""
-
         cpf_valido = self._status_valido(linha.get(COLUNA_CPF_VALIDO, ""))
         cnpj_valido = self._status_valido(linha.get(COLUNA_CNPJ_VALIDO, ""))
-        if not cpf_valido and not cnpj_valido:
-            return ""
 
         if cpf_valido:
-            return f"CPF_{documento}"
-        return f"CNPJ_{self._normalizar_cnpj(documento)}"
+            cpf = self._texto(linha.get(COLUNA_CPF, ""))
+            if cpf:
+                return f"CPF_{cpf}"
+
+        if cnpj_valido:
+            cnpj = self._normalizar_cnpj(linha.get(COLUNA_CNPJ, ""))
+            if cnpj:
+                return f"CNPJ_{cnpj}"
+
+        return ""
 
     def _reidentificar_cpfs(self, df: pd.DataFrame, anonimizador: AnonimizadorReversivel) -> int:
         total = 0
@@ -389,7 +406,7 @@ class BaseImobiliarioModuloIVService:
             if not self._status_valido(linha.get(COLUNA_CPF_VALIDO, "")):
                 continue
 
-            documento = self._texto(linha.get(COLUNA_DOCUMENTO, ""))
+            documento = self._texto(linha.get(COLUNA_CPF, ""))
             if not documento:
                 continue
 
@@ -397,7 +414,7 @@ class BaseImobiliarioModuloIVService:
             if decriptografado.startswith("[ERRO"):
                 continue
 
-            df.at[indice, COLUNA_DOCUMENTO] = re.sub(r"\D", "", decriptografado) or decriptografado
+            df.at[indice, COLUNA_CPF] = re.sub(r"\D", "", decriptografado) or decriptografado
             total += 1
 
         return total
@@ -467,10 +484,9 @@ class BaseImobiliarioModuloIVService:
         return resultado.drop(columns=["_documento_valido_ordem"]).reset_index(drop=True)
 
     def _proteger_documento_saida(self, df: pd.DataFrame) -> None:
-        if COLUNA_DOCUMENTO not in df.columns:
-            return
-
-        df[COLUNA_DOCUMENTO] = df[COLUNA_DOCUMENTO].apply(self._formatar_como_texto)
+        for coluna in [COLUNA_CPF, COLUNA_CNPJ]:
+            if coluna in df.columns:
+                df[coluna] = df[coluna].apply(self._formatar_como_texto)
 
     def _mover_colunas_rastreio_para_final(self, df: pd.DataFrame) -> pd.DataFrame:
         sufixos_rastreio = (
