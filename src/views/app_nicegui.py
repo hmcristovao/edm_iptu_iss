@@ -871,27 +871,44 @@ class IntegracaoEnriquecimentoApp:
         self.state.rodando = True
         self._atualizar_botoes()
         self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão humana.")
+        self.saida_execucao_atual = []
+        saida_anterior = os.environ.get("AVALIADOR_ARQUIVO_REVISAO_SAIDA")
+        os.environ["AVALIADOR_ARQUIVO_REVISAO_SAIDA"] = arquivo_saida
 
         try:
-            df_completo = await asyncio.to_thread(self.revisao_service.carregar_dados)
-            await asyncio.to_thread(
-                self.revisao_service.salvar_arquivo_revisado,
-                df_completo,
-                self.state.decisoes,
-                arquivo_saida,
+            def ao_progredir(linha: str):
+                if not linha.strip():
+                    return
+                self.saida_execucao_atual.append(linha)
+                self._atualizar_loading("Geração do Arquivo Revisado: Executando...", linha, 50)
+
+            codigo = await self.pipeline_runner.executar(
+                os.path.join("..", "moduloII", "gerar_revisado.py"),
+                ao_progredir,
             )
+            if codigo != 0:
+                ultimas_linhas = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
+                ui.notify("Erro ao gerar arquivo revisado.")
+                self._atualizar_loading("Geração do Arquivo Revisado: Erro", ultimas_linhas, 0)
+                return
+
+            resultado = self._extrair_resultado_arquivo_revisado()
             await asyncio.to_thread(self._remover_arquivo_se_existir, arquivo_remover)
         except Exception as erro:
             ui.notify(f"Erro ao gerar arquivo revisado: {erro}")
             self._atualizar_loading("Geração do Arquivo Revisado: Erro", str(erro), 0)
         else:
-            self.state.arquivo_revisao_atual = arquivo_saida
+            self.state.arquivo_revisao_atual = resultado.get("saida", arquivo_saida)
             self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
             self._fechar_bloqueio()
-            self.download_revisado_label.set_text(f"O arquivo foi salvo em {arquivo_saida}.")
-            ui.notify(f"Arquivo salvo: {arquivo_saida}.")
+            self.download_revisado_label.set_text(f"O arquivo foi salvo em {self.state.arquivo_revisao_atual}.")
+            ui.notify(f"Arquivo salvo: {self.state.arquivo_revisao_atual}.")
             self.dialog_download_revisado.open()
         finally:
+            if saida_anterior is None:
+                os.environ.pop("AVALIADOR_ARQUIVO_REVISAO_SAIDA", None)
+            else:
+                os.environ["AVALIADOR_ARQUIVO_REVISAO_SAIDA"] = saida_anterior
             self.state.rodando = False
             self._atualizar_botoes()
             self._fechar_bloqueio()
@@ -1049,6 +1066,13 @@ class IntegracaoEnriquecimentoApp:
 
     def _extrair_resultado_reidentificacao(self) -> dict:
         prefixo = "RESULTADO_REIDENTIFICACAO_JSON="
+        for linha in reversed(self.saida_execucao_atual):
+            if linha.startswith(prefixo):
+                return json.loads(linha[len(prefixo):])
+        return {}
+
+    def _extrair_resultado_arquivo_revisado(self) -> dict:
+        prefixo = "RESULTADO_ARQUIVO_REVISADO_JSON="
         for linha in reversed(self.saida_execucao_atual):
             if linha.startswith(prefixo):
                 return json.loads(linha[len(prefixo):])

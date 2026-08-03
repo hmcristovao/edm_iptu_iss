@@ -168,11 +168,11 @@ aplicar_configuracao_externa()
 PARAMETROS_COMPARACAO = [
     {
         "nome": "nome",
-        "padrao_colunas": r"^(nome|parceiro|cliente|individuo|responsavel|responsavelPelaFamilia|parceiroNegocios)",
+        "padrao_colunas": r"^(nome|parceiro|cliente|individuo|responsavel|responsavelPelaFamilia|parceiroNegocios|razaoSocial)",
         "tipo": "texto",
         "peso": 3.5,
         "comparacao": "string",
-        "metodo": "jarowinkler",
+        "metodo": "levenshtein",
         "threshold_apoio": THRESHOLD_APOIO_NOME,
     },
     {

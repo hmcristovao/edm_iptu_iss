@@ -90,6 +90,39 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
 
 
 class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
+    async def test_arquivo_revisado_roda_em_subprocesso_pelo_pipeline_runner(self):
+        app = IntegracaoEnriquecimentoApp()
+        chamadas = {}
+
+        class FakePipelineRunner:
+            async def executar(self, script, ao_progredir):
+                chamadas["script"] = script
+                ao_progredir(
+                    'RESULTADO_ARQUIVO_REVISADO_JSON={"saida": "arquivos_gerados/integracao_parcial.csv"}'
+                )
+                return 0
+
+        app.state.df = object()
+        app.state.decisoes = {"G1:0:1": {"decisao": "aprovar"}}
+        app.pipeline_runner = FakePipelineRunner()
+        app.revisao_service.carregar_dados = lambda: (_ for _ in ()).throw(
+            AssertionError("nao deve carregar o CSV completo no processo da interface")
+        )
+        app._definir_arquivo_etapa3_saida = lambda: "arquivos_gerados/integracao_parcial.csv"
+        app._remover_arquivo_se_existir = lambda arquivo: chamadas.setdefault("removido", arquivo)
+        app._abrir_loading = lambda *args: None
+        app._atualizar_loading = lambda *args: None
+        app._fechar_bloqueio = lambda: None
+        app._atualizar_botoes = lambda: None
+        app.download_revisado_label = SimpleNamespace(set_text=lambda texto: chamadas.setdefault("label", texto))
+        app.dialog_download_revisado = SimpleNamespace(open=lambda: chamadas.setdefault("dialog", True))
+
+        with patch("src.views.app_nicegui.ui.notify"):
+            await app.gerar_arquivo_revisado()
+
+        self.assertEqual(chamadas["script"], os.path.join("..", "moduloII", "gerar_revisado.py"))
+        self.assertEqual(app.state.arquivo_revisao_atual, "arquivos_gerados/integracao_parcial.csv")
+
     async def test_reidentificacao_roda_em_subprocesso_pelo_pipeline_runner(self):
         app = IntegracaoEnriquecimentoApp()
         chamadas = {}
