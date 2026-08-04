@@ -1,58 +1,53 @@
 # Integração e Enriquecimento
+
 ## Visão Geral
 
-O processo é composto por quatro atividades operacionais:
+Este projeto organiza um fluxo de preparação, padronização, pseudonimização, enriquecimento, revisão humana, reidentificação e geração de uma base imobiliária enriquecida.
 
-1. **Preparação**: lê os CSVs da pasta de trabalho, identifica registros válidos/inválidos e gera a base inicial consolidada.
-2. **Enriquecimento**: compara registros, aplica regras de similaridade, realiza uniões automáticas e marca candidatos para revisão humana.
-3. **Revisão Humana**: permite aprovar ou rejeitar candidatos, registrar observações, identificar o usuário responsável e gerar o arquivo final ou parcial.
-4. **Reidentificação**: usa a chave de pseudonimização para reassociar pseudônimos aos CPFs originais em uma cópia da base final.
+O uso recomendado é pela interface NiceGUI. Ela centraliza a escolha da pasta de trabalho, executa as etapas em sequência e registra os principais arquivos gerados.
 
-## Estrutura do Código
-
-Na pasta do projeto fica apenas o inicializador da aplicação. O código foi separado por módulos:
+## Estrutura do Projeto
 
 ```text
 avaliador/
-  app_nicegui.py          # Inicializador da aplicação
+  app_nicegui.py          # Inicializador da interface
   requirements.txt        # Dependências Python
   README.md
   src/
     moduloI/              # Leitura, padronização e pseudonimização das bases originais
-    moduloII/             # Integração, enriquecimento e configuração
-    moduloIII/            # Reidentificação dos pseudônimos
-    views/                # Interface gráfica NiceGUI e serviços de tela
+    moduloII/             # Preparação, enriquecimento, revisão e configuração
+    moduloIII/            # Reidentificação dos CPFs pseudonimizados
+    moduloIV/             # Geração da base imobiliária enriquecida
+    parametrizacao/       # Geração automática de arquivos de parâmetros
+    views/                # Interface gráfica e estado da aplicação
 ```
 
 ## Pasta de Trabalho
 
-A pasta de trabalho é escolhida na interface. Os CSVs de entrada devem estar diretamente na raiz dessa pasta:
+A pasta de trabalho é selecionada na interface. Ela concentra os arquivos de entrada e as saídas do processamento.
+
+Durante a execução, o sistema pode criar ou utilizar pastas como:
 
 ```text
-minha_pasta_de_trabalho/
-  Economico.csv
-  EdpArrecadado.csv
-  EdpFaturado.csv
-  EducacaoResponsaveis.csv
-  ...
+arquivos_gerados/
+dados_processados/
+logs/
 ```
 
-Durante a execução, o sistema cria dentro dela:
-
-```text
-minha_pasta_de_trabalho/
-  arquivos_gerados/
-  logs/
-```
-
-Todo o fluxo de dados acontece nessa pasta de trabalho. A pasta do código permanece onde o sistema foi iniciado.
+Os arquivos gerados pelo fluxo principal ficam, em geral, em `arquivos_gerados/`. Os arquivos padronizados por fonte ficam em `dados_processados/`.
 
 ## Requisitos
 
 - Python 3.11 ou superior
 - Windows PowerShell ou terminal equivalente
 
-Dependências:
+Instale as dependências com:
+
+```powershell
+pip install -r requirements.txt
+```
+
+As principais dependências são:
 
 ```text
 nicegui
@@ -71,22 +66,11 @@ xlrd
 
 ## Instalação
 
-Entre na pasta do projeto:
+Entre na pasta do projeto, crie e ative um ambiente virtual:
 
 ```powershell
-cd C:\Users\dalva\Documents\EDM\edppe\avaliador
-```
-
-Crie um ambiente virtual:
-
-```powershell
-python -m venv .venv
-```
-
-Ative o ambiente virtual:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 ```
 
 Instale as dependências:
@@ -103,18 +87,20 @@ Com o ambiente virtual ativo:
 python app_nicegui.py
 ```
 
-Abra no navegador o endereço mostrado pelo NiceGUI, normalmente:
+Abra no navegador o endereço exibido pelo NiceGUI, normalmente:
 
 ```text
 http://localhost:8080
 ```
 
+Se a porta já estiver em uso, encerre o processo anterior ou configure outra porta pela variável de ambiente usada pela aplicação.
+
 ## Login
 
 Ao abrir o app, informe:
 
-- Nome do usuário
-- Senha padrão
+- nome do usuário;
+- senha padrão.
 
 A senha padrão é:
 
@@ -125,78 +111,90 @@ A senha padrão é:
 Para alterar a senha sem editar o código:
 
 ```powershell
-$env:APP_SENHA_PADRAO = "minha_senha"
+$env:APP_SENHA_PADRAO = "nova_senha"
 python app_nicegui.py
 ```
 
 O nome informado no login é usado na auditoria da revisão humana.
 
-## Como Usar
+## Fluxo Pela Interface
 
 ### 1. Selecionar Pasta de Trabalho
 
-Clique em:
+Clique em `Selecionar Pasta de Trabalho` e informe a pasta que contém os dados do processamento.
 
-```text
-Selecionar Pasta de Trabalho
-```
+A partir desse momento, as etapas passam a ler e gravar arquivos dentro dessa pasta.
 
-Cole no campo o caminho completo da pasta onde já estão os CSVs de entrada.
+### 2. Gerar Parâmetros
 
-Exemplo:
+Clique em `Gerar Parâmetros` quando houver fontes ainda sem arquivo de parâmetros.
 
-```text
-C:\Users\********\Documents\pasta
-```
+Essa etapa usa o modelo base em `src/parametrizacao/parametros.txt` e gera arquivos `parametros_*.txt` nas pastas das fontes.
 
-Ao confirmar, o sistema:
+A parametrização:
 
-- usa essa pasta como raiz de dados;
-- lê os CSVs diretamente dela;
-- cria `arquivos_gerados/`, se necessário;
-- cria `logs/`, se necessário.
+- percorre as subpastas da pasta de trabalho;
+- ignora pastas de sistema do fluxo, como `arquivos_gerados`, `dados_processados`, `logs` e `parametros`;
+- não altera pastas que já possuem arquivo `.txt`;
+- identifica formato da tabela;
+- tenta detectar cabeçalho e última linha de dados;
+- preenche `Sufix`, `Header#`, `Footer#`, `Format`, `CSV separator` e `Variables`;
+- sugere nomes padronizados para variáveis com base nos nomes das colunas.
 
-### 2. Iniciar Preparação
+### 3. Processar Arquivos Originais
 
-Clique em:
+Clique em `Processar Arquivos Originais` para ler os arquivos brutos das fontes e gerar bases padronizadas por fonte.
 
-```text
-Iniciar Preparação
-```
+Essa etapa utiliza os arquivos de parâmetros disponíveis nas pastas das fontes e grava os resultados em `dados_processados/`.
 
-A preparação lê os CSVs da pasta de trabalho.
+O objetivo é transformar as diferentes entradas em tabelas padronizadas, com campos em camelCase e CPFs pseudonimizados quando aplicável.
 
-Saídas:
+### 4. Iniciar Preparação
+
+Clique em `Iniciar Preparação`.
+
+A preparação consolida os dados processados em uma base única para enriquecimento.
+
+Saída principal:
 
 ```text
 arquivos_gerados/integracao_base.csv
+```
+
+Log principal:
+
+```text
 logs/integracao_preparacao_log.txt
 ```
 
-### 3. Configurar Enriquecimento
+### 5. Configurar Enriquecimento
 
-Na área **Configurações do Enriquecimento**, ajuste os thresholds.
+Na área de configuração do enriquecimento, ajuste os thresholds.
 
-As configurações são salvas na pasta do código:
+As configurações são salvas em:
 
 ```text
 src/moduloII/integracao_config.json
 ```
 
-Principais campos:
+Campos principais:
 
-- **Merge Automático (%)**: score mínimo para união automática.
-- **Revisão Humana (%)**: score mínimo para encaminhar à revisão.
-- **Nome, Telefone, E-mail, Nascimento, Endereço, Número, Identificador**: thresholds de apoio.
-- **Máx. Pares por Bloco**: limite para evitar blocos muito grandes na comparação.
+- `threshold_similaridade`: score mínimo para merge automático.
+- `threshold_revisar`: score mínimo para enviar à revisão humana.
+- `threshold_apoio_nome`: apoio por nome.
+- `threshold_apoio_telefone`: apoio por telefone.
+- `threshold_apoio_email`: apoio por e-mail.
+- `threshold_apoio_nascimento`: apoio por nascimento.
+- `threshold_apoio_endereco`: apoio por endereço.
+- `threshold_apoio_numero`: apoio por número.
+- `threshold_apoio_identificador_documento`: apoio por documentos auxiliares.
+- `max_pares_por_valor_bloco`: limite de pares gerados por bloco frequente.
 
-### 4. Iniciar Enriquecimento
+Quando um threshold de apoio é configurado como `101`, esse apoio fica desabilitado, porque os scores vão de 0 a 100.
 
-Clique em:
+### 6. Iniciar Enriquecimento
 
-```text
-Iniciar Enriquecimento
-```
+Clique em `Iniciar Enriquecimento`.
 
 O enriquecimento lê:
 
@@ -212,15 +210,11 @@ arquivos_gerados/integracao_log_merges.csv
 logs/integracao_enriquecimento_log.txt
 ```
 
-Ao rodar o enriquecimento, decisões antigas da revisão humana são removidas para evitar reaproveitar decisões de outra base.
+Nessa etapa, o sistema compara registros, calcula scores, aplica merges automáticos e marca pares que precisam de revisão humana.
 
-### 5. Iniciar Revisão
+### 7. Iniciar Revisão
 
-Clique em:
-
-```text
-Iniciar Revisão
-```
+Clique em `Iniciar Revisão`.
 
 A revisão carrega:
 
@@ -230,12 +224,12 @@ arquivos_gerados/integracao_enriquecida.csv
 
 Durante a revisão, é possível:
 
-- aprovar união;
-- rejeitar união;
-- escrever observações;
+- aprovar merge;
+- rejeitar merge;
+- registrar observações;
 - pausar e continuar depois;
 - gerar arquivo revisado;
-- baixar o arquivo gerado.
+- baixar o arquivo revisado.
 
 As decisões são salvas em:
 
@@ -243,28 +237,94 @@ As decisões são salvas em:
 arquivos_gerados/revisao_merges_decisoes.csv
 ```
 
-## Saídas da Revisão
-
-O nome do arquivo depende da situação da revisão:
+Ao gerar o arquivo revisado, o sistema cria:
 
 ```text
 arquivos_gerados/integracao_final.csv
+```
+
+ou:
+
+```text
 arquivos_gerados/integracao_parcial.csv
 ```
 
-Se não houver pares pendentes, o sistema gera:
+Se ainda houver revisões pendentes, a saída é parcial. Se não houver pendências, a saída é final.
+
+### 8. Reidentificar Base
+
+Clique em `Reidentificar Base` após gerar a base final ou parcial.
+
+Essa etapa usa a chave de pseudonimização para reidentificar CPFs em uma cópia da base, sem modificar o arquivo anterior.
+
+Entrada:
 
 ```text
-integracao_final.csv
+arquivos_gerados/integracao_final.csv
 ```
 
-Se ainda houver pares pendentes, o sistema gera:
+ou:
 
 ```text
-integracao_parcial.csv
+arquivos_gerados/integracao_parcial.csv
 ```
 
-Apenas um desses dois arquivos fica disponível por vez. Ao gerar um, o outro é removido automaticamente.
+Saída:
+
+```text
+arquivos_gerados/integracao_reidentificada.csv
+```
+
+### 9. Gerar Base Imobiliária
+
+Clique em `Gerar Base Imobiliária` após gerar a integração reidentificada.
+
+Essa etapa combina o cadastro imobiliário processado com dados disponíveis na integração reidentificada.
+
+Entradas principais:
+
+```text
+dados_processados/imobiliario.csv
+arquivos_gerados/integracao_reidentificada.csv
+```
+
+Saída:
+
+```text
+arquivos_gerados/base_imobiliario_modulo_iv.csv
+```
+
+O módulo IV:
+
+- usa CPF/CNPJ válidos do imobiliário como chave;
+- remove duplicidades por documento;
+- agrega inscrições imobiliárias duplicadas com ` | `;
+- reidentifica CPFs do imobiliário quando necessário;
+- enriquece telefone e e-mail com dados da integração reidentificada;
+- cria colunas rastreadas para contatos enriquecidos;
+- mantém informações de origem, `id_revisao`, usuário e data de revisão quando disponíveis;
+- ordena registros com CPF/CNPJ válido antes dos inválidos.
+
+## Regra Geral do Enriquecimento
+
+O enriquecimento separa a base em dois grupos:
+
+- registros com `merge_key`: considerados válidos;
+- registros sem `merge_key`: candidatos a serem juntados a registros válidos.
+
+Depois, cria pares candidatos usando blocos de comparação, como telefone, e-mail, documentos auxiliares, cadastro de serviço, nome com nascimento, CEP, bairro com nome e tokens do nome.
+
+Cada par recebe scores por campo. O score total é uma média ponderada apenas dos campos que existem nos dois lados.
+
+Um merge automático exige:
+
+```text
+score_total >= threshold_similaridade
+e
+pelo menos uma regra de apoio válida
+```
+
+Pares que passam de `threshold_revisar`, mas não cumprem merge automático, são encaminhados para revisão humana.
 
 ## Auditoria da Revisão Humana
 
@@ -276,42 +336,69 @@ Cada decisão registra:
 - `data_decisao`
 - `score_revisao`
 
-No arquivo revisado, a auditoria entra nas colunas:
+No arquivo revisado, a auditoria pode aparecer em colunas como:
 
 - `usuario_revisao`
 - `decisao_revisao`
 - `observacao_revisao`
 - `data_revisao`
 
-Para uniões aprovadas, a auditoria fica na linha válida enriquecida.
+Quando uma junção aprovada contribui com telefone ou e-mail para a base imobiliária, o módulo IV também preserva rastros como:
 
-Para uniões rejeitadas, a auditoria fica na linha inválida que permanece no arquivo.
+- origem do dado;
+- `id_revisao`;
+- usuário da revisão;
+- data da revisão.
 
 ## Executar Pelo Terminal
 
 O fluxo recomendado é pela interface, porque ela define a pasta de trabalho automaticamente para os subprocessos.
 
-Para executar manualmente, defina `AVALIADOR_WORKDIR` antes:
+Para executar manualmente, defina a pasta de trabalho antes:
 
 ```powershell
-$env:AVALIADOR_WORKDIR = "C:\Users\********\Documents\pasta"
-python src\moduloII\preparacao.py
-python src\moduloII\enriquecimento.py
-$env:APP_CHAVE_PSEUDONIMIZACAO = "minha_chave"
-python src\moduloIII\reassociacao.py
+$env:AVALIADOR_WORKDIR = "caminho_da_pasta_de_trabalho"
 ```
 
-Sem `AVALIADOR_WORKDIR`, os scripts usam a própria pasta do código como pasta de trabalho.
+Depois execute os módulos desejados:
+
+```powershell
+python src\moduloII\preparacao.py
+python src\moduloII\enriquecimento.py
+python src\moduloII\gerar_revisado.py
+python src\moduloIII\reassociacao.py
+python src\moduloIV\base_imobiliario.py
+```
+
+Para etapas que usam a chave de pseudonimização:
+
+```powershell
+$env:APP_CHAVE_PSEUDONIMIZACAO = "minha_chave"
+```
+
+Sem `AVALIADOR_WORKDIR`, os scripts usam a pasta em que o sistema foi iniciado como pasta de trabalho.
 
 ## Solução de Problemas
 
-### A preparação não encontra arquivos
+### A interface não abre
 
-Confira se os CSVs estão diretamente na raiz da pasta de trabalho escolhida.
+Confira se o ambiente virtual está ativo e se as dependências foram instaladas.
+
+Se a porta estiver em uso, encerre a execução anterior ou configure outra porta.
+
+### A parametrização não gerou arquivo para uma fonte
+
+Confira se a pasta da fonte contém uma tabela compatível e se ainda não existe arquivo `.txt` nela.
+
+Pastas de sistema do fluxo são ignoradas automaticamente.
+
+### A preparação não encontra dados
+
+Confira se os arquivos processados foram gerados em `dados_processados/` ou se existem entradas válidas para a preparação.
 
 ### O enriquecimento não inicia
 
-Confirme se a preparação gerou:
+Confira se existe:
 
 ```text
 arquivos_gerados/integracao_base.csv
@@ -319,15 +406,28 @@ arquivos_gerados/integracao_base.csv
 
 ### A revisão não inicia
 
-Confirme se o enriquecimento gerou:
+Confira se existe:
 
 ```text
 arquivos_gerados/integracao_enriquecida.csv
 ```
 
-### Os arquivos foram gerados na pasta errada
+### A reidentificação não inicia
 
-Confira a pasta exibida em **Pasta de Trabalho** na interface.
+Gere primeiro o arquivo final ou parcial da revisão.
+
+### A base imobiliária não inicia
+
+Confira se existem:
+
+```text
+dados_processados/imobiliario.csv
+arquivos_gerados/integracao_reidentificada.csv
+```
+
+### Arquivos foram gerados no lugar errado
+
+Confira a pasta exibida em `Pasta de Trabalho` na interface.
 
 ### Quero trocar a senha padrão
 
