@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import queue
+import re
 import socket
 import sys
 import traceback
@@ -1025,9 +1026,11 @@ class IntegracaoEnriquecimentoApp:
             if codigo != 0:
                 ultimas_linhas = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
                 erro_terminal = "\n".join(self.saida_execucao_atual) or ultimas_linhas
+                mensagem_erro = self._mensagem_erro_modulo_iv(erro_terminal)
                 self._imprimir_erro_modulo_iv(erro_terminal)
                 self._executar_ui(lambda: ui.notify("Erro ao gerar a base imobiliária."))
-                self._atualizar_loading("Base Imobiliária: Erro", ultimas_linhas, 0)
+                self._atualizar_loading("Base Imobiliária: Erro", mensagem_erro, 0)
+                self._exibir_resultado_base_imobiliaria(mensagem_erro)
                 return
 
             resultado = self._extrair_resultado_modulo_iv()
@@ -1045,9 +1048,12 @@ class IntegracaoEnriquecimentoApp:
             caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_base_imobiliario_modulo_iv))
             self._executar_ui(lambda: ui.download(str(caminho), filename=caminho.name))
         except Exception as erro:
-            self._imprimir_erro_modulo_iv(traceback.format_exc())
+            erro_terminal = traceback.format_exc()
+            mensagem_erro = self._mensagem_erro_modulo_iv(erro_terminal)
+            self._imprimir_erro_modulo_iv(erro_terminal)
             self._executar_ui(lambda: ui.notify(f"Erro ao gerar a base imobiliária: {erro}"))
-            self._atualizar_loading("Base Imobiliária: Erro", str(erro), 0)
+            self._atualizar_loading("Base Imobiliária: Erro", mensagem_erro, 0)
+            self._exibir_resultado_base_imobiliaria(mensagem_erro)
         finally:
             if chave_anterior is None:
                 os.environ.pop("key", None)
@@ -1081,6 +1087,17 @@ class IntegracaoEnriquecimentoApp:
     def _imprimir_erro_modulo_iv(self, erro: str):
         print("\nErro ao gerar a base imobiliaria.", file=sys.stderr)
         print(str(erro).strip() or "Erro sem detalhes.", file=sys.stderr)
+
+    def _mensagem_erro_modulo_iv(self, erro: str) -> str:
+        texto = str(erro).strip()
+        match = re.search(r"ValueError:\s*([^\n\r]+)", texto)
+        if match:
+            return f"ERRO: {match.group(1).strip()}"
+        return f"ERRO: {texto}" if texto else "ERRO: Erro ao gerar a base imobiliária."
+
+    def _exibir_resultado_base_imobiliaria(self, mensagem: str):
+        if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
+            self._executar_ui(self.dialog_resultado_base_imobiliaria.open)
 
     def _formatar_percentual(self, valor) -> str:
         try:

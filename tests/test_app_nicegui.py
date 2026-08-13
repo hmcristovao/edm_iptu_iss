@@ -88,6 +88,20 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         self.assertIn("Erro ao gerar a base imobiliaria", saida.getvalue())
         self.assertIn("traceback do modulo iv", saida.getvalue())
 
+    def test_mensagem_erro_modulo_iv_exibe_value_error(self):
+        app = IntegracaoEnriquecimentoApp()
+        erro = (
+            "ValueError: Coluna(s) obrigatoria(s) ausente(s): "
+            "cpfImobiliario, cnpjImobiliario."
+        )
+
+        mensagem = app._mensagem_erro_modulo_iv(erro)
+
+        self.assertEqual(
+            mensagem,
+            "ERRO: Coluna(s) obrigatoria(s) ausente(s): cpfImobiliario, cnpjImobiliario.",
+        )
+
 
 class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
     async def test_arquivo_revisado_roda_em_subprocesso_pelo_pipeline_runner(self):
