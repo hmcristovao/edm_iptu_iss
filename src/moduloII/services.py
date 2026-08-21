@@ -415,24 +415,51 @@ class RevisaoService:
 
 
 class PipelineRunner:
+    PIPELINES_POR_SCRIPT = {
+        "preparacao.py": "moduloII.preparacao",
+        "enriquecimento.py": "moduloII.enriquecimento",
+        "gerar_revisado.py": "moduloII.gerar_revisado",
+        "reassociacao.py": "moduloIII.reassociacao",
+        "base_imobiliario.py": "moduloIV.base_imobiliario",
+    }
+
     def __init__(self, paths: AppPaths):
         self.paths = paths
+
+    def script_disponivel(self, script: str) -> bool:
+        if self._executando_congelado():
+            return self._pipeline_por_script(script) is not None
+        return self.paths.resolver_codigo(script).exists()
+
+    def _comando(self, script: str) -> list[str]:
+        if self._executando_congelado():
+            pipeline = self._pipeline_por_script(script)
+            if not pipeline:
+                raise ValueError(f"Pipeline não mapeado para o script: {script}.")
+            return [sys.executable, "--run-pipeline", pipeline]
+
+        script_path = self.paths.resolver_codigo(script)
+        return [sys.executable, "-u", str(script_path)]
+
+    def _pipeline_por_script(self, script: str) -> str | None:
+        nome_script = str(script).replace("\\", "/").rsplit("/", 1)[-1]
+        return self.PIPELINES_POR_SCRIPT.get(nome_script)
+
+    def _executando_congelado(self) -> bool:
+        return bool(getattr(sys, "frozen", False))
 
     async def executar(
         self,
         script: str,
         ao_progredir: Callable[[str], None],
     ) -> int:
-        script_path = self.paths.resolver_codigo(script)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["AVALIADOR_WORKDIR"] = str(self.paths.work_dir)
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
         processo = await asyncio.create_subprocess_exec(
-            sys.executable,
-            "-u",
-            str(script_path),
+            *self._comando(script),
             cwd=str(self.paths.code_dir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,

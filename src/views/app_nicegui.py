@@ -522,7 +522,7 @@ class IntegracaoEnriquecimentoApp:
         self._atualizar_botoes()
         self._abrir_loading(f"{self._nome_execucao(numero_execucao)}: Iniciando...", "")
 
-        if not self.paths.resolver_codigo(script).exists():
+        if not self.pipeline_runner.script_disponivel(script):
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", f"Script não encontrado: {script}.", 0)
             ui.notify(f"Script não encontrado: {script}.")
             self.state.rodando = False

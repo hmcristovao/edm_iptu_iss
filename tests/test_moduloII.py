@@ -1,5 +1,7 @@
 import unittest
+import sys
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -13,11 +15,36 @@ from src.moduloII.app_config import (
     COLUNA_USUARIO_REVISAO,
     AppPaths,
 )
-from src.moduloII.services import RevisaoService, extrair_porcentagem, texto_valor, valor_vazio
+from src.moduloII.services import PipelineRunner, RevisaoService, extrair_porcentagem, texto_valor, valor_vazio
 from src.moduloII import enriquecimento
 
 
 class ServicesModuloIITest(unittest.TestCase):
+    def test_pipeline_runner_monta_comando_python_em_desenvolvimento(self):
+        paths = AppPaths()
+        runner = PipelineRunner(paths)
+
+        with patch.object(sys, "executable", "python.exe"):
+            comando = runner._comando("preparacao.py")
+
+        self.assertEqual(comando[0:2], ["python.exe", "-u"])
+        self.assertTrue(comando[2].endswith("preparacao.py"))
+
+    def test_pipeline_runner_monta_comando_do_executavel_quando_congelado(self):
+        runner = PipelineRunner(AppPaths())
+
+        with patch.object(sys, "frozen", True, create=True), patch.object(sys, "executable", "PIEC.exe"):
+            comando = runner._comando("..\\moduloIV\\base_imobiliario.py")
+
+        self.assertEqual(comando, ["PIEC.exe", "--run-pipeline", "moduloIV.base_imobiliario"])
+
+    def test_pipeline_runner_considera_scripts_mapeados_disponiveis_quando_congelado(self):
+        runner = PipelineRunner(AppPaths())
+
+        with patch.object(sys, "frozen", True, create=True):
+            self.assertTrue(runner.script_disponivel("..\\moduloIII\\reassociacao.py"))
+            self.assertFalse(runner.script_disponivel("script_desconhecido.py"))
+
     def test_utilitarios_tratam_valores_vazios_e_porcentagem(self):
         self.assertTrue(valor_vazio(""))
         self.assertTrue(valor_vazio(" null "))
