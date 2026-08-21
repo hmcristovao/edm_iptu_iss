@@ -11,6 +11,13 @@ from src.parametrizacao.regras_variaveis import sugerir_variavel
 
 
 class GeradorParametrosServiceTest(unittest.TestCase):
+    def test_template_de_parametros_e_lido_como_recurso_do_pacote(self):
+        service = GeradorParametrosService(AppPaths())
+
+        conteudo = service._conteudo_template()
+
+        self.assertIn("Variables:", conteudo)
+
     def test_regras_de_preenchimento_das_variaveis(self):
         casos = {
             "CPF/CNPJ": "cpf, cpfValido, cnpj, cnpjValido",

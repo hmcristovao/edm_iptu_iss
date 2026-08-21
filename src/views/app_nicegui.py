@@ -27,6 +27,7 @@ from src.views.app_state import AppState
 
 class IntegracaoEnriquecimentoApp:
     TAMANHO_LOTE_GRUPOS_REVISAO = 25
+    HOST_LOCAL = "127.0.0.1"
 
     def __init__(self):
         self.paths = AppPaths()
@@ -45,6 +46,16 @@ class IntegracaoEnriquecimentoApp:
         self.linhas_revisao_cache = {}
 
     def run(self):
+        porta = self._encontrar_porta_livre()
+        ui.run(
+            root=self._montar_pagina,
+            title="Integração e Enriquecimento",
+            reload=False,
+            host=self.HOST_LOCAL,
+            port=porta,
+        )
+
+    def _montar_pagina(self):
         self._configurar_tema()
         self._montar_dialogos()
         self._montar_layout()
@@ -53,14 +64,12 @@ class IntegracaoEnriquecimentoApp:
         self._atualizar_status()
         self._atualizar_botoes()
         ui.timer(0.1, self.abrir_login, once=True)
-        porta = self._encontrar_porta_livre()
-        ui.run(title="Integração e Enriquecimento", reload=False, port=porta)
 
     def _encontrar_porta_livre(self, inicial: int = 8080) -> int:
         for porta in range(inicial, inicial + 20):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 try:
-                    sock.bind(("0.0.0.0", porta))
+                    sock.bind((self.HOST_LOCAL, porta))
                 except OSError:
                     continue
                 return porta
@@ -349,6 +358,9 @@ class IntegracaoEnriquecimentoApp:
         ui.notify(f"Pasta de trabalho definida: {self.paths.work_dir}")
 
     def salvar_config_ui(self):
+        if not self.state.pasta_trabalho_selecionada:
+            ui.notify("Selecione uma pasta de trabalho antes de salvar a configuração.")
+            return
         self.config_service.salvar(self._config_atual())
         ui.notify(f"Configuração salva em {self.paths.arquivo_config_integracao}.")
 
@@ -1345,7 +1357,10 @@ class IntegracaoEnriquecimentoApp:
             self.botao_base_imobiliario_modulo_iv,
             autenticado and not rodando and imobiliario_existe and integracao_reidentificada_existe,
         )
-        self._definir_habilitado(self.botao_salvar_config, autenticado and not rodando)
+        self._definir_habilitado(
+            self.botao_salvar_config,
+            autenticado and not rodando and self.state.pasta_trabalho_selecionada,
+        )
 
     def _definir_habilitado(self, elemento, habilitado: bool):
         if habilitado:

@@ -9,6 +9,24 @@ from src.views.app_nicegui import IntegracaoEnriquecimentoApp
 
 
 class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
+    def test_run_informa_pagina_raiz_ao_nicegui(self):
+        app = IntegracaoEnriquecimentoApp()
+        app._encontrar_porta_livre = lambda: 9090
+
+        with patch("src.views.app_nicegui.ui.run") as run:
+            app.run()
+
+        run.assert_called_once_with(
+            root=app._montar_pagina,
+            title="Integração e Enriquecimento",
+            reload=False,
+            host="127.0.0.1",
+            port=9090,
+        )
+
+    def test_host_padrao_restringe_acesso_a_maquina_local(self):
+        self.assertEqual(IntegracaoEnriquecimentoApp.HOST_LOCAL, "127.0.0.1")
+
     def test_parametrizacao_exige_pasta_de_trabalho_selecionada(self):
         app = IntegracaoEnriquecimentoApp()
         app.state.autenticado = True
@@ -19,6 +37,46 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         app.state.pasta_trabalho_selecionada = True
 
         self.assertTrue(app._pode_gerar_parametros())
+
+    def test_salvar_configuracao_exige_pasta_de_trabalho_selecionada(self):
+        app = IntegracaoEnriquecimentoApp()
+        app.state.pasta_trabalho_selecionada = False
+        app.config_service.salvar = lambda config: (_ for _ in ()).throw(
+            AssertionError("nao deve salvar sem pasta de trabalho")
+        )
+
+        with patch("src.views.app_nicegui.ui.notify") as notify:
+            app.salvar_config_ui()
+
+        notify.assert_called_once_with("Selecione uma pasta de trabalho antes de salvar a configuração.")
+
+    def test_botao_salvar_configuracao_exige_pasta_de_trabalho_selecionada(self):
+        app = IntegracaoEnriquecimentoApp()
+        estados = []
+        app.botao_pasta_trabalho = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_processamento_legado = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_gerar_parametros = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_preparacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_enriquecimento = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_revisao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_reidentificacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_base_imobiliario_modulo_iv = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_salvar_config = SimpleNamespace(
+            enable=lambda: estados.append("enable"),
+            disable=lambda: estados.append("disable"),
+        )
+        app.paths.existe = lambda caminho: False
+        app.entrada_service.listar_csvs = lambda: []
+        app._arquivo_revisao_existente = lambda: ""
+        app.state.autenticado = True
+        app.state.rodando = False
+        app.state.pasta_trabalho_selecionada = False
+
+        app._atualizar_botoes()
+        app.state.pasta_trabalho_selecionada = True
+        app._atualizar_botoes()
+
+        self.assertEqual(estados, ["disable", "enable"])
 
     def test_executar_ui_ignora_slot_deletado_do_nicegui(self):
         app = IntegracaoEnriquecimentoApp()

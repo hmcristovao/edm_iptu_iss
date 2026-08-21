@@ -1,6 +1,7 @@
 import re
 import unicodedata
 from dataclasses import dataclass
+from importlib import resources
 from pathlib import Path
 
 from src.moduloII.app_config import AppPaths
@@ -91,7 +92,7 @@ class GeradorParametrosService:
 
     def _renderizar(self, prefixo: str, estrutura: EstruturaTabela) -> str:
         linhas = []
-        for linha in self._arquivo_template().read_text(encoding="utf-8").splitlines():
+        for linha in self._conteudo_template().splitlines():
             lower = linha.strip().lower()
             if lower.startswith("sufix:"):
                 linhas.append(f"Sufix: {self._sufixo(prefixo)}")
@@ -111,8 +112,8 @@ class GeradorParametrosService:
                 linhas.append(linha)
         return "\n".join(linhas) + "\n"
 
-    def _arquivo_template(self) -> Path:
-        return Path(__file__).with_name("parametros.txt")
+    def _conteudo_template(self) -> str:
+        return resources.files("src.parametrizacao").joinpath("parametros.txt").read_text(encoding="utf-8")
 
     def _renderizar_variavel(self, coluna: str) -> str:
         variavel = sugerir_variavel(coluna)

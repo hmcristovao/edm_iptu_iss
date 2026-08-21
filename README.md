@@ -93,6 +93,8 @@ Abra no navegador o endereço exibido pelo NiceGUI, normalmente:
 http://localhost:8080
 ```
 
+Por segurança, a interface escuta apenas em `127.0.0.1`, ficando acessível somente na máquina local.
+
 Se a porta já estiver em uso, encerre o processo anterior ou configure outra porta pela variável de ambiente usada pela aplicação.
 
 ## Login
@@ -349,6 +351,24 @@ Quando uma junção aprovada contribui com telefone ou e-mail para a base imobil
 - `id_revisao`;
 - usuário da revisão;
 - data da revisão.
+
+## Empacotamento
+
+Ao gerar um executável, inclua explicitamente o template da parametrização:
+
+```text
+src/parametrizacao/parametros.txt
+```
+
+Esse arquivo é usado em runtime pelo botão `Gerar Parâmetros`.
+
+No PyInstaller, um exemplo de inclusão é:
+
+```powershell
+pyinstaller --add-data "src/parametrizacao/parametros.txt;src/parametrizacao" app_nicegui.py
+```
+
+O executável também precisa preservar os módulos usados pelo modo interno `--run-pipeline`, pois a interface chama o próprio executável para executar etapas pesadas em subprocesso.
 
 ## Executar Pelo Terminal
 
