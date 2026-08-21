@@ -9,7 +9,7 @@ class AppPaths:
     work_dir: Path = field(default_factory=lambda: Path(os.environ.get("AVALIADOR_WORKDIR", Path.cwd())).resolve())
     pasta_gerados: str = "arquivos_gerados"
     pasta_logs: str = "logs"
-    arquivo_config_integracao: str = "integracao_config.json"
+    arquivo_config_integracao: str = os.path.join("arquivos_gerados", "integracao_config.json")
 
     @property
     def arquivo_preparacao(self) -> str:
@@ -81,11 +81,11 @@ class AppSettings:
         default_factory=lambda: {
             "threshold_similaridade": 85,
             "threshold_revisar": 80,
-            "threshold_apoio_nome": 96,
-            "threshold_apoio_telefone": 98,
-            "threshold_apoio_email": 100,
-            "threshold_apoio_nascimento": 100,
-            "threshold_apoio_endereco": 98,
+            "threshold_apoio_nome": 100,
+            "threshold_apoio_telefone": 95,
+            "threshold_apoio_email": 99,
+            "threshold_apoio_nascimento": 99,
+            "threshold_apoio_endereco": 100,
             "threshold_apoio_numero": 100,
             "threshold_apoio_identificador_documento": 98,
             "max_pares_por_valor_bloco": 1500000,

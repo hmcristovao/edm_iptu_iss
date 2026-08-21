@@ -14,12 +14,47 @@ from src.moduloII.app_config import (
     COLUNA_SCORE_REVISAO,
     COLUNA_USUARIO_REVISAO,
     AppPaths,
+    AppSettings,
 )
-from src.moduloII.services import PipelineRunner, RevisaoService, extrair_porcentagem, texto_valor, valor_vazio
+from src.moduloII.services import (
+    IntegracaoConfigService,
+    PipelineRunner,
+    RevisaoService,
+    extrair_porcentagem,
+    texto_valor,
+    valor_vazio,
+)
 from src.moduloII import enriquecimento
 
 
 class ServicesModuloIITest(unittest.TestCase):
+    def test_config_integracao_usa_default_atual_sem_arquivo_na_pasta_de_trabalho(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            service = IntegracaoConfigService(paths, AppSettings())
+
+            config = service.carregar()
+
+        self.assertEqual(config["threshold_apoio_nome"], 100)
+        self.assertEqual(config["threshold_apoio_telefone"], 95)
+        self.assertEqual(config["threshold_apoio_email"], 99)
+        self.assertEqual(config["threshold_apoio_nascimento"], 99)
+        self.assertEqual(config["threshold_apoio_endereco"], 100)
+
+    def test_config_integracao_salva_na_pasta_de_trabalho(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            service = IntegracaoConfigService(paths, AppSettings())
+
+            service.salvar({"threshold_similaridade": 88})
+
+            caminho_config = paths.resolver(paths.arquivo_config_integracao)
+            self.assertTrue(caminho_config.exists())
+            self.assertEqual(caminho_config.parent.name, paths.pasta_gerados)
+            self.assertEqual(service.carregar()["threshold_similaridade"], 88)
+
     def test_pipeline_runner_monta_comando_python_em_desenvolvimento(self):
         paths = AppPaths()
         runner = PipelineRunner(paths)

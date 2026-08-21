@@ -171,10 +171,10 @@ logs/integracao_preparacao_log.txt
 
 Na área de configuração do enriquecimento, ajuste os thresholds.
 
-As configurações são salvas em:
+As configurações são salvas na pasta de trabalho em:
 
 ```text
-src/moduloII/integracao_config.json
+arquivos_gerados/integracao_config.json
 ```
 
 Campos principais:

@@ -38,7 +38,7 @@ ARQUIVO_SAIDA = os.path.join(PASTA_GERADOS, "integracao_enriquecida.csv")
 ARQUIVO_LOG_MERGES = os.path.join(PASTA_GERADOS, "integracao_log_merges.csv")
 ARQUIVO_LOG_TXT = os.path.join(PASTA_LOGS, "integracao_enriquecimento_log.txt")
 ARQUIVO_DECISOES_REVISAO = os.path.join(PASTA_GERADOS, "revisao_merges_decisoes.csv")
-ARQUIVO_CONFIGURACAO = "integracao_config.json"
+ARQUIVO_CONFIGURACAO = os.path.join(PASTA_GERADOS, "integracao_config.json")
 COLUNA_REVISAO = "id_revisao"
 COLUNA_SCORE_REVISAO = "score_revisao"
 
@@ -109,11 +109,11 @@ def registrar_log_terminal(caminho_log: str):
 THRESHOLD_SIMILARIDADE = 85
 THRESHOLD_REVISAR = 80
 
-THRESHOLD_APOIO_NOME = 96
-THRESHOLD_APOIO_TELEFONE = 98
-THRESHOLD_APOIO_EMAIL = 100
-THRESHOLD_APOIO_NASCIMENTO = 100
-THRESHOLD_APOIO_ENDERECO = 98
+THRESHOLD_APOIO_NOME = 100
+THRESHOLD_APOIO_TELEFONE = 95
+THRESHOLD_APOIO_EMAIL = 99
+THRESHOLD_APOIO_NASCIMENTO = 99
+THRESHOLD_APOIO_ENDERECO = 100
 THRESHOLD_APOIO_NUMERO = 100
 THRESHOLD_APOIO_IDENTIFICADOR_DOCUMENTO = 98
 
@@ -138,7 +138,7 @@ def aplicar_configuracao_externa():
     global MAX_WORKERS_COMPARACAO
 
     try:
-        with open(os.path.join(CODE_DIR, ARQUIVO_CONFIGURACAO), "r", encoding="utf-8") as arquivo:
+        with open(caminho_projeto(ARQUIVO_CONFIGURACAO), "r", encoding="utf-8") as arquivo:
             config = json.load(arquivo)
     except FileNotFoundError:
         return

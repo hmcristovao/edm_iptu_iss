@@ -59,7 +59,7 @@ class IntegracaoConfigService:
         self.settings = settings
 
     def carregar(self) -> dict:
-        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_integracao)
+        caminho_config = self.paths.resolver(self.paths.arquivo_config_integracao)
         if not caminho_config.exists():
             return self.settings.integracao_config_padrao.copy()
 
@@ -74,7 +74,8 @@ class IntegracaoConfigService:
         return config_final
 
     def salvar(self, config: dict):
-        caminho_config = self.paths.resolver_codigo(self.paths.arquivo_config_integracao)
+        caminho_config = self.paths.resolver(self.paths.arquivo_config_integracao)
+        self.paths.garantir_pasta_arquivo(self.paths.arquivo_config_integracao)
         with caminho_config.open("w", encoding="utf-8") as arquivo:
             json.dump(config, arquivo, ensure_ascii=False, indent=2)
 
