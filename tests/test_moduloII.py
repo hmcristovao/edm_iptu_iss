@@ -1,5 +1,6 @@
 import unittest
 import sys
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -79,6 +80,18 @@ class ServicesModuloIITest(unittest.TestCase):
         with patch.object(sys, "frozen", True, create=True):
             self.assertTrue(runner.script_disponivel("..\\moduloIII\\reassociacao.py"))
             self.assertFalse(runner.script_disponivel("script_desconhecido.py"))
+
+    def test_pipeline_runner_usa_pasta_de_trabalho_como_cwd_quando_congelado(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            paths.code_dir = paths.work_dir / "diretorio_inexistente_do_bundle"
+            runner = PipelineRunner(paths)
+
+            with patch.object(sys, "frozen", True, create=True):
+                cwd = runner._diretorio_execucao()
+
+        self.assertEqual(cwd, Path(pasta).resolve())
 
     def test_utilitarios_tratam_valores_vazios_e_porcentagem(self):
         self.assertTrue(valor_vazio(""))

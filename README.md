@@ -365,7 +365,7 @@ Esse arquivo é usado em runtime pelo botão `Gerar Parâmetros`.
 No PyInstaller, um exemplo de inclusão é:
 
 ```powershell
-pyinstaller --add-data "src/parametrizacao/parametros.txt;src/parametrizacao" app_nicegui.py
+pyinstaller PIEC.spec
 ```
 
 O executável também precisa preservar os módulos usados pelo modo interno `--run-pipeline`, pois a interface chama o próprio executável para executar etapas pesadas em subprocesso.

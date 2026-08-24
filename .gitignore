@@ -3,6 +3,8 @@ __pycache__/
 
 .env
 venv/
+dist/*
+build/*
 
 arquivos_gerados/
 dados/

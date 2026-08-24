@@ -449,6 +449,11 @@ class PipelineRunner:
     def _executando_congelado(self) -> bool:
         return bool(getattr(sys, "frozen", False))
 
+    def _diretorio_execucao(self):
+        if self._executando_congelado():
+            return self.paths.work_dir
+        return self.paths.code_dir
+
     async def executar(
         self,
         script: str,
@@ -461,7 +466,7 @@ class PipelineRunner:
 
         processo = await asyncio.create_subprocess_exec(
             *self._comando(script),
-            cwd=str(self.paths.code_dir),
+            cwd=str(self._diretorio_execucao()),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             env=env,
