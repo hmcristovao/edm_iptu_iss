@@ -295,13 +295,17 @@ class IntegracaoEnriquecimentoApp:
                 self.botao_revisao = ui.button("Iniciar Revisão", on_click=self.iniciar_revisao).props(
                     "color=primary unelevated"
                 )
+                self.botao_base_imobiliario_modulo_iv = ui.button(
+                    "Gerar Base Imobiliária",
+                    on_click=self.gerar_base_imobiliario_modulo_iv,
+                ).props("color=primary unelevated")
                 self.botao_reidentificacao = ui.button(
                     "Reidentificar Base",
                     on_click=self.reidentificar_base,
                 ).props("color=primary unelevated")
-                self.botao_base_imobiliario_modulo_iv = ui.button(
-                    "Gerar Base Imobiliária",
-                    on_click=self.gerar_base_imobiliario_modulo_iv,
+                self.botao_download_base_imobiliaria = ui.button(
+                    "Baixar Base Imobiliária",
+                    on_click=self.baixar_base_imobiliaria_reidentificada,
                 ).props("color=primary unelevated")
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
@@ -938,6 +942,15 @@ class IntegracaoEnriquecimentoApp:
             return
         ui.download(str(caminho), filename=caminho.name)
 
+    def baixar_base_imobiliaria_reidentificada(self):
+        arquivo = self.paths.arquivo_base_imobiliario_reidentificada
+        if not self.paths.existe(arquivo):
+            ui.notify("Reidentifique a base imobiliária antes de baixar.")
+            return
+
+        caminho = self.paths.resolver(arquivo)
+        ui.download(str(caminho), filename=caminho.name)
+
     async def reidentificar_base(self):
         if self.state.rodando:
             return
@@ -985,6 +998,11 @@ class IntegracaoEnriquecimentoApp:
                 f"{resultado.get('valores_reidentificados', 0)} valor(es) reidentificado(s). "
                 f"Arquivo salvo em {resultado.get('saida', self.paths.arquivo_integracao_reidentificada)}."
             )
+            if resultado.get("base_imobiliaria_saida"):
+                mensagem += (
+                    f" Base imobiliária reidentificada em {resultado.get('base_imobiliaria_saida')} "
+                    f"com {resultado.get('base_imobiliaria_valores_reidentificados', 0)} CPF(s)."
+                )
             self._atualizar_loading("Reidentificação: 100%", mensagem, 100)
             ui.notify(mensagem)
             caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_integracao_reidentificada))
@@ -1002,17 +1020,12 @@ class IntegracaoEnriquecimentoApp:
         if self.state.rodando:
             return
 
-        chave = texto_valor(self.chave_legado_input.value)
-        if len(chave) < 8:
-            ui.notify("Informe a chave de pseudonimização usada no processamento original.")
-            return
-
         arquivo_entrada = os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv")
         if not self.paths.existe(arquivo_entrada):
             ui.notify("Arquivo dados_processados/imobiliario.csv não encontrado na pasta de trabalho.")
             return
-        if not self.paths.existe(self.paths.arquivo_integracao_reidentificada):
-            ui.notify("Gere a integração reidentificada antes de gerar a base imobiliária.")
+        if not self._arquivo_revisao_existente():
+            ui.notify("Gere o arquivo final ou parcial antes de gerar a base imobiliária.")
             return
 
         self.state.rodando = True
@@ -1021,7 +1034,6 @@ class IntegracaoEnriquecimentoApp:
 
         self.saida_execucao_atual = []
         chave_anterior = os.environ.get("key")
-        os.environ["key"] = chave
 
         try:
             def ao_progredir(linha: str):
@@ -1057,8 +1069,6 @@ class IntegracaoEnriquecimentoApp:
             self._atualizar_loading("Base Imobiliária: 100%", mensagem, 100)
             if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
                 self._executar_ui(self.dialog_resultado_base_imobiliaria.open)
-            caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_base_imobiliario_modulo_iv))
-            self._executar_ui(lambda: ui.download(str(caminho), filename=caminho.name))
         except Exception as erro:
             erro_terminal = traceback.format_exc()
             mensagem_erro = self._mensagem_erro_modulo_iv(erro_terminal)
@@ -1338,7 +1348,7 @@ class IntegracaoEnriquecimentoApp:
         preparacao_existe = self.paths.existe(self.paths.arquivo_preparacao)
         enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
         imobiliario_existe = self.paths.existe(os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv"))
-        integracao_reidentificada_existe = self.paths.existe(self.paths.arquivo_integracao_reidentificada)
+        arquivo_revisao_existe = bool(self._arquivo_revisao_existente())
         entrada_existe = bool(self.entrada_service.listar_csvs())
         rodando = self.state.rodando
         autenticado = self.state.autenticado
@@ -1351,11 +1361,15 @@ class IntegracaoEnriquecimentoApp:
         self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)
         self._definir_habilitado(
             self.botao_reidentificacao,
-            autenticado and not rodando and bool(self._arquivo_revisao_existente()),
+            autenticado and not rodando and arquivo_revisao_existe,
         )
         self._definir_habilitado(
             self.botao_base_imobiliario_modulo_iv,
-            autenticado and not rodando and imobiliario_existe and integracao_reidentificada_existe,
+            autenticado and not rodando and imobiliario_existe and arquivo_revisao_existe,
+        )
+        self._definir_habilitado(
+            self.botao_download_base_imobiliaria,
+            autenticado and not rodando and self.paths.existe(self.paths.arquivo_base_imobiliario_reidentificada),
         )
         self._definir_habilitado(
             self.botao_salvar_config,

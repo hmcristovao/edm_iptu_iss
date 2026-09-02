@@ -44,6 +44,10 @@ class AppPaths:
         return os.path.join(self.pasta_gerados, "base_imobiliario_modulo_iv.csv")
 
     @property
+    def arquivo_base_imobiliario_reidentificada(self) -> str:
+        return os.path.join(self.pasta_gerados, "base_imobiliario_reidentificada.csv")
+
+    @property
     def pasta_dados_processados(self) -> str:
         return "dados_processados"
 

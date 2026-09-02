@@ -1,7 +1,10 @@
 import unittest
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 import pandas as pd
 
+from src.moduloII.app_config import AppPaths
 from src.moduloIV.base_imobiliario import (
     COLUNA_CNPJ_VALIDO,
     COLUNA_CNPJ,
@@ -296,6 +299,57 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(emails, 0)
         self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}1", imobiliario.columns)
         self.assertNotIn(f"{PREFIXO_EMAIL_ENRIQUECIDO}1", imobiliario.columns)
+
+    def test_gerar_usa_integracao_final_e_cruza_cpf_pseudonimizado_sem_reidentificar(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            service = BaseImobiliarioModuloIVService(paths)
+            paths.garantir_pasta(paths.pasta_dados_processados)
+            paths.garantir_pasta(paths.pasta_gerados)
+            pd.DataFrame(
+                {
+                    COLUNA_CPF: ["cpf_enc"],
+                    COLUNA_CNPJ: [""],
+                    COLUNA_CPF_VALIDO: ["S"],
+                    COLUNA_CNPJ_VALIDO: ["N"],
+                    COLUNA_INSCRICAO: ["100"],
+                    COLUNA_CELULAR: [""],
+                    COLUNA_EMAIL: [""],
+                }
+            ).to_csv(paths.resolver("dados_processados/imobiliario.csv"), sep=";", encoding="utf-8-sig", index=False)
+            pd.DataFrame(
+                {
+                    "merge_key": ["CPF_cpf_enc"],
+                    "telefoneSaude": ["81999990000"],
+                    "emailSaude": ["ana@exemplo.com"],
+                }
+            ).to_csv(paths.resolver(paths.arquivo_integracao_final), sep=";", encoding="utf-8-sig", index=False)
+
+            with patch("src.moduloIV.base_imobiliario.AnonimizadorReversivel") as anonimizador:
+                resultado = service.gerar("")
+
+            saida = pd.read_csv(paths.resolver(resultado.saida), sep=";", encoding="utf-8-sig", dtype=str).fillna("")
+            anonimizador.return_value.decrypt.assert_not_called()
+            self.assertEqual(resultado.cpfs_reidentificados, 0)
+            self.assertEqual(saida.at[0, COLUNA_CPF], "\tcpf_enc")
+            self.assertEqual(saida.at[0, f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"], "81999990000")
+            self.assertEqual(saida.at[0, f"{PREFIXO_EMAIL_ENRIQUECIDO}1"], "ana@exemplo.com")
+
+    def test_arquivo_integracao_padrao_usa_parcial_quando_final_nao_existe(self):
+        with TemporaryDirectory() as pasta:
+            paths = AppPaths()
+            paths.definir_pasta_trabalho(pasta)
+            service = BaseImobiliarioModuloIVService(paths)
+            paths.garantir_pasta(paths.pasta_gerados)
+            pd.DataFrame({"merge_key": ["CPF_cpf_enc"]}).to_csv(
+                paths.resolver(paths.arquivo_integracao_parcial),
+                sep=";",
+                encoding="utf-8-sig",
+                index=False,
+            )
+
+            self.assertEqual(service._arquivo_integracao_padrao(), paths.arquivo_integracao_parcial)
 
     def test_move_colunas_de_rastreio_para_o_final_da_tabela(self):
         df = pd.DataFrame(

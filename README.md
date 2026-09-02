@@ -253,15 +253,16 @@ arquivos_gerados/integracao_parcial.csv
 
 Se ainda houver revisões pendentes, a saída é parcial. Se não houver pendências, a saída é final.
 
-### 8. Reidentificar Base
+### 8. Gerar Base Imobiliária
 
-Clique em `Reidentificar Base` após gerar a base final ou parcial.
+Clique em `Gerar Base Imobiliária` após gerar a base final ou parcial.
 
-Essa etapa usa a chave de pseudonimização para reidentificar CPFs em uma cópia da base, sem modificar o arquivo anterior.
+Essa etapa combina o cadastro imobiliário processado com dados disponíveis na integração ainda pseudonimizada. As comparações por CPF usam o mesmo pseudônimo presente no imobiliário e na `merge_key`; CNPJs continuam em texto normalizado.
 
-Entrada:
+Entradas principais:
 
 ```text
+dados_processados/imobiliario.csv
 arquivos_gerados/integracao_final.csv
 ```
 
@@ -269,25 +270,6 @@ ou:
 
 ```text
 arquivos_gerados/integracao_parcial.csv
-```
-
-Saída:
-
-```text
-arquivos_gerados/integracao_reidentificada.csv
-```
-
-### 9. Gerar Base Imobiliária
-
-Clique em `Gerar Base Imobiliária` após gerar a integração reidentificada.
-
-Essa etapa combina o cadastro imobiliário processado com dados disponíveis na integração reidentificada.
-
-Entradas principais:
-
-```text
-dados_processados/imobiliario.csv
-arquivos_gerados/integracao_reidentificada.csv
 ```
 
 Saída:
@@ -301,11 +283,44 @@ O módulo IV:
 - usa CPF/CNPJ válidos do imobiliário como chave;
 - remove duplicidades por documento;
 - agrega inscrições imobiliárias duplicadas com ` | `;
-- reidentifica CPFs do imobiliário quando necessário;
-- enriquece telefone e e-mail com dados da integração reidentificada;
+- mantém CPFs pseudonimizados até a etapa de reidentificação;
+- enriquece telefone e e-mail com dados da integração final ou parcial;
 - cria colunas rastreadas para contatos enriquecidos;
 - mantém informações de origem, `id_revisao`, usuário e data de revisão quando disponíveis;
 - ordena registros com CPF/CNPJ válido antes dos inválidos.
+
+### 9. Reidentificar Base
+
+Clique em `Reidentificar Base` após gerar a base imobiliária.
+
+Essa etapa usa a chave de pseudonimização para reidentificar CPFs em cópias das bases, sem modificar os arquivos pseudonimizados anteriores.
+
+Entradas:
+
+```text
+arquivos_gerados/integracao_final.csv
+```
+
+ou:
+
+```text
+arquivos_gerados/integracao_parcial.csv
+```
+
+e, quando existir:
+
+```text
+arquivos_gerados/base_imobiliario_modulo_iv.csv
+```
+
+Saídas:
+
+```text
+arquivos_gerados/integracao_reidentificada.csv
+arquivos_gerados/base_imobiliario_reidentificada.csv
+```
+
+Após essa etapa, use `Baixar Base Imobiliária` para baixar a base imobiliária reidentificada.
 
 ## Regra Geral do Enriquecimento
 
@@ -442,8 +457,10 @@ Confira se existem:
 
 ```text
 dados_processados/imobiliario.csv
-arquivos_gerados/integracao_reidentificada.csv
+arquivos_gerados/integracao_final.csv
 ```
+
+ou `arquivos_gerados/integracao_parcial.csv`.
 
 ### Arquivos foram gerados no lugar errado
 

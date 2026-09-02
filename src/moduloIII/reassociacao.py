@@ -20,6 +20,8 @@ class ResultadoReidentificacao:
     saida: str
     colunas_reidentificadas: list[str]
     valores_reidentificados: int
+    base_imobiliaria_saida: str = ""
+    base_imobiliaria_valores_reidentificados: int = 0
 
 
 def resultado_reidentificacao_payload(resultado: ResultadoReidentificacao) -> dict:
@@ -28,6 +30,8 @@ def resultado_reidentificacao_payload(resultado: ResultadoReidentificacao) -> di
         "saida": resultado.saida,
         "total_colunas_reidentificadas": len(resultado.colunas_reidentificadas),
         "valores_reidentificados": resultado.valores_reidentificados,
+        "base_imobiliaria_saida": resultado.base_imobiliaria_saida,
+        "base_imobiliaria_valores_reidentificados": resultado.base_imobiliaria_valores_reidentificados,
     }
 
 
@@ -76,13 +80,20 @@ class ReidentificacaoService:
 
         self._registrar(registrar_progresso, f"Salvando {saida}.")
         self.paths.garantir_pasta_arquivo(saida)
+        self._proteger_documentos_como_texto(df)
         df.to_csv(self.paths.resolver(saida), sep=";", encoding="utf-8-sig", index=False)
+        base_saida, base_total = self._reidentificar_base_imobiliaria(
+            anonimizador,
+            registrar_progresso,
+        )
 
         return ResultadoReidentificacao(
             entrada=entrada,
             saida=saida,
             colunas_reidentificadas=colunas,
             valores_reidentificados=total,
+            base_imobiliaria_saida=base_saida,
+            base_imobiliaria_valores_reidentificados=base_total,
         )
 
     def _registrar(self, registrar_progresso: Callable[[str], None] | None, mensagem: str) -> None:
@@ -96,12 +107,50 @@ class ReidentificacaoService:
             return self.paths.arquivo_integracao_parcial
         return ""
 
+    def _reidentificar_base_imobiliaria(
+        self,
+        anonimizador: AnonimizadorReversivel,
+        registrar_progresso: Callable[[str], None] | None,
+    ) -> tuple[str, int]:
+        if not self.paths.existe(self.paths.arquivo_base_imobiliario_modulo_iv):
+            return "", 0
+
+        entrada = self.paths.arquivo_base_imobiliario_modulo_iv
+        saida = self.paths.arquivo_base_imobiliario_reidentificada
+        self._registrar(registrar_progresso, f"Reidentificando base imobiliaria {entrada}.")
+        df = pd.read_csv(self.paths.resolver(entrada), sep=";", encoding="utf-8-sig", dtype=str).fillna("")
+        total = 0
+
+        for coluna in self._colunas_cpf(df):
+            df[coluna], quantidade = self._decriptografar_serie(df[coluna], anonimizador)
+            total += quantidade
+
+        self.paths.garantir_pasta_arquivo(saida)
+        self._proteger_documentos_como_texto(df)
+        df.to_csv(self.paths.resolver(saida), sep=";", encoding="utf-8-sig", index=False)
+        return saida, total
+
     def _colunas_cpf(self, df: pd.DataFrame) -> list[str]:
         return [
             coluna
             for coluna in df.columns
             if "cpf" in str(coluna).lower() and "valid" not in str(coluna).lower()
         ]
+
+    def _proteger_documentos_como_texto(self, df: pd.DataFrame) -> None:
+        for coluna in df.columns:
+            nome = str(coluna).lower()
+            if ("cpf" not in nome and "cnpj" not in nome) or "valid" in nome:
+                continue
+            df[coluna] = df[coluna].apply(self._formatar_como_texto)
+
+    def _formatar_como_texto(self, valor) -> str:
+        texto = str(valor).strip()
+        if texto.lower() in {"", "nan", "none", "null"}:
+            return ""
+        if texto.startswith("\t"):
+            return texto
+        return f"\t{texto}"
 
     def _decriptografar_serie(
         self,

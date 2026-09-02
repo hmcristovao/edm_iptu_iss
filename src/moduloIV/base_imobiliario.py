@@ -69,26 +69,20 @@ class BaseImobiliarioModuloIVService:
         arquivo_saida: str | None = None,
         arquivo_integracao: str | None = None,
     ) -> ResultadoBaseImobiliarioModuloIV:
-        if not chave:
-            raise ValueError("Informe a chave usada na pseudonimizacao.")
-
         entrada = arquivo_entrada or self._arquivo_entrada_padrao()
         saida = arquivo_saida or self.paths.arquivo_base_imobiliario_modulo_iv
-        integracao = arquivo_integracao or self.paths.arquivo_integracao_reidentificada
+        integracao = arquivo_integracao or self._arquivo_integracao_padrao()
 
         caminho_entrada = self.paths.resolver(entrada)
         if not caminho_entrada.exists():
             raise FileNotFoundError(f"Arquivo do cadastro imobiliario nao encontrado: {entrada}.")
         caminho_integracao = self.paths.resolver(integracao)
         if not caminho_integracao.exists():
-            raise FileNotFoundError(f"Arquivo de integracao reidentificada nao encontrado: {integracao}.")
-
-        os.environ["key"] = chave
-        anonimizador = AnonimizadorReversivel()
+            raise FileNotFoundError(f"Arquivo de integracao final ou parcial nao encontrado: {integracao}.")
 
         df = pd.read_csv(caminho_entrada, sep=";", encoding="utf-8-sig", dtype=str).fillna("")
         df_saida, linhas_removidas = self._remover_duplicados_agregando_inscricoes(df)
-        cpfs_reidentificados = self._reidentificar_cpfs(df_saida, anonimizador)
+        cpfs_reidentificados = 0
         df_integracao = pd.read_csv(caminho_integracao, sep=";", encoding="utf-8-sig", dtype=str).fillna("")
         celulares_preenchidos = self._contar_preenchidos(df_saida, COLUNA_CELULAR)
         emails_preenchidos = self._contar_preenchidos(df_saida, COLUNA_EMAIL)
@@ -126,6 +120,13 @@ class BaseImobiliarioModuloIVService:
 
     def _arquivo_entrada_padrao(self) -> str:
         return (Path(self.paths.pasta_dados_processados) / "imobiliario.csv").as_posix()
+
+    def _arquivo_integracao_padrao(self) -> str:
+        if self.paths.existe(self.paths.arquivo_integracao_final):
+            return self.paths.arquivo_integracao_final
+        if self.paths.existe(self.paths.arquivo_integracao_parcial):
+            return self.paths.arquivo_integracao_parcial
+        return self.paths.arquivo_integracao_final
 
     def _enriquecer_contatos(self, df_imobiliario: pd.DataFrame, df_integracao: pd.DataFrame) -> tuple[int, int]:
         mapa = self._mapear_contatos_por_documento(df_integracao)
@@ -208,7 +209,8 @@ class BaseImobiliarioModuloIVService:
 
         if str(coluna).lower() == COLUNA_MERGE_KEY:
             if texto.startswith("CPF_"):
-                return f"CPF_{self._normalizar_documento(texto[4:])}"
+                cpf = self._limpar_texto_documento(texto[4:])
+                return f"CPF_{cpf}" if cpf else ""
             if texto.startswith("CNPJ_"):
                 return f"CNPJ_{self._normalizar_documento(texto[5:])}"
             return ""
