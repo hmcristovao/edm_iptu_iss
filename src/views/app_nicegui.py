@@ -23,6 +23,7 @@ from src.moduloII.services import (
 from src.moduloIII.reassociacao import ReidentificacaoService
 from src.parametrizacao import GeradorParametrosService
 from src.views.app_state import AppState
+from src.views.login import montar_login
 
 
 class IntegracaoEnriquecimentoApp:
@@ -115,15 +116,9 @@ class IntegracaoEnriquecimentoApp:
         )
 
     def _montar_dialogos(self):
-        self.login_dialog = ui.dialog().props("persistent")
-        with self.login_dialog, ui.card().classes("w-[420px] gap-4 rounded-lg"):
-            ui.label("Acesso ao Sistema").classes("text-xl font-semibold text-slate-900")
-            ui.label("Informe seu nome e a senha padrão para continuar.").classes("text-sm text-slate-600")
-            self.nome_usuario_input = ui.input("Nome do usuário").props("outlined dense").classes("w-full")
-            self.senha_input = ui.input("Senha", password=True, password_toggle_button=True).props(
-                "outlined dense"
-            ).classes("w-full")
-            ui.button("Entrar", on_click=self.autenticar_usuario).props("color=primary unelevated").classes("w-full")
+        self.login_dialog, self.nome_usuario_input, self.senha_input, self.login_erro_label = montar_login(
+            self.autenticar_usuario
+        )
 
         self.dialog_pasta_trabalho = ui.dialog()
         with self.dialog_pasta_trabalho, ui.card().classes("w-[680px] gap-4 rounded-lg"):
@@ -310,13 +305,14 @@ class IntegracaoEnriquecimentoApp:
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
         senha = texto_valor(self.senha_input.value)
+        self.login_erro_label.set_text("")
 
         if not usuario:
-            ui.notify("Informe o nome do usuário.")
+            self.login_erro_label.set_text("Informe o nome do usuário.")
             return
 
         if senha != self.settings.senha_padrao:
-            ui.notify("Senha inválida.")
+            self.login_erro_label.set_text("Senha inválida.")
             return
 
         self.state.autenticado = True

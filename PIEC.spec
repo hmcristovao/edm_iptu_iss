@@ -12,6 +12,10 @@ datas = [
         str(project_root / "src" / "parametrizacao" / "parametros.txt"),
         "src/parametrizacao",
     ),
+    (
+        str(project_root / "src" / "views" / "assets"),
+        "src/views/assets",
+    ),
 ]
 binaries = []
 hiddenimports = [

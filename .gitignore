@@ -8,6 +8,7 @@ build/*
 
 arquivos_gerados/
 dados/
+modelos/
 logs/
 *.log
 *.zip
