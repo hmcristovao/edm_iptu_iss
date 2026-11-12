@@ -241,7 +241,7 @@ class BaseImobiliarioModuloIVServiceTest(unittest.TestCase):
         self.assertEqual(imobiliario[f"{PREFIXO_TELEFONE_ENRIQUECIDO}1"].tolist(), ["81999990000"])
         self.assertNotIn(f"{PREFIXO_TELEFONE_ENRIQUECIDO}2", imobiliario.columns)
 
-    def test_nao_enriquece_contato_de_linha_pendente_de_revisao_humana(self):
+    def test_nao_enriquece_contato_de_linha_pendente_de_revisao_manual(self):
         imobiliario = pd.DataFrame(
             {
                 COLUNA_CPF: ["52998224725"],

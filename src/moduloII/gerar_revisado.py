@@ -22,7 +22,7 @@ def gerar_arquivo_revisado(arquivo_saida: str | None = None) -> dict:
     print(f"Carregando {paths.arquivo_enriquecimento}...")
     df = service.carregar_dados()
 
-    print("Carregando decisoes da revisao humana...")
+    print("Carregando decisoes da revisao manual...")
     decisoes = service.carregar_decisoes()
 
     print(f"Aplicando {len(decisoes)} decisao(oes) e salvando {saida}...")

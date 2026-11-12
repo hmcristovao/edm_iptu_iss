@@ -1,29 +1,6 @@
-from pathlib import Path
+from nicegui import ui
 
-from nicegui import app, ui
-
-
-ASSETS_DIR = Path(__file__).parent / "assets"
-FONTE_REGULAR_URL = app.add_static_file(local_file=ASSETS_DIR / "UfesSans-Regular.ttf")
-FONTE_BOLD_URL = app.add_static_file(local_file=ASSETS_DIR / "UfesSans-Bold.ttf")
-FONTES_CSS = f"""
-<style>
-  @font-face {{
-    font-family: "UFES Sans";
-    src: url("{FONTE_REGULAR_URL}") format("truetype");
-    font-weight: 400;
-    font-style: normal;
-    font-display: swap;
-  }}
-  @font-face {{
-    font-family: "UFES Sans";
-    src: url("{FONTE_BOLD_URL}") format("truetype");
-    font-weight: 700;
-    font-style: normal;
-    font-display: swap;
-  }}
-</style>
-"""
+from src.views.theme import ASSETS_DIR, FONTES_CSS
 
 
 LOGIN_CSS = """
@@ -64,20 +41,13 @@ LOGIN_CSS = """
     transform: translateY(8px);
   }
   .login-brand {
-    position: relative;
     width: 321px;
     max-width: 100%;
-    aspect-ratio: 321 / 269;
-    overflow: hidden;
-    transform: translate(4px, -23.5px);
+    aspect-ratio: 296.426 / 217.532;
   }
   .login-brand .login-brand-logo {
-    position: absolute;
-    left: calc(-100% * 106 / 321);
-    top: calc(-100% * 45 / 269);
-    width: calc(100% * 495 / 321);
-    height: calc(100% * 361 / 269);
-    max-width: none;
+    width: 100%;
+    height: 100%;
   }
   .login-screen .login-card {
     width: 508px;
@@ -163,7 +133,7 @@ LOGIN_CSS = """
   @media (max-width: 850px) {
     .login-main { padding: 40px 24px; }
     .login-content { width: 508px; grid-template-columns: minmax(0, 1fr); gap: 36px; transform: none; }
-    .login-brand { width: 222px; transform: none; }
+    .login-brand { width: 222px; }
     .login-footer { flex-basis: 90px; }
   }
   @media (max-width: 560px) {
@@ -175,6 +145,12 @@ LOGIN_CSS = """
     .login-field + .login-field { margin-top: 24px; }
     .login-error { margin-top: 6px; min-height: 18px; line-height: 18px; }
     .login-screen .login-submit { width: 100%; max-width: 242px; margin-top: 6px; }
+  }
+  @media (min-width: 851px) and (max-height: 700px) {
+    .login-main { padding: 16px 32px; }
+    .login-content { transform: none; }
+    .login-footer { flex-basis: 80px; }
+    .login-footer-logo { height: 72px; }
   }
 </style>
 """
@@ -188,7 +164,7 @@ def montar_login(autenticar_usuario):
         with ui.element("main").classes("login-main"):
             with ui.element("div").classes("login-content"):
                 with ui.element("section").classes("login-brand").props('aria-label="integra FISCAL"'):
-                    ui.image(ASSETS_DIR / "nome_solucao.png").props(
+                    ui.image(ASSETS_DIR / "nome_solucao.svg").props(
                         'fit=contain no-spinner alt="integra FISCAL. Inteligência cadastral para a gestão fiscal"'
                     ).classes("login-brand-logo")
                 with ui.card().classes("login-card"):

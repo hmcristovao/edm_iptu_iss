@@ -24,6 +24,8 @@ from src.moduloIII.reassociacao import ReidentificacaoService
 from src.parametrizacao import GeradorParametrosService
 from src.views.app_state import AppState
 from src.views.login import montar_login
+from src.views.theme import APP_CSS, FONTES_CSS
+from src.views.workflow import WorkflowView
 
 
 class IntegracaoEnriquecimentoApp:
@@ -45,6 +47,9 @@ class IntegracaoEnriquecimentoApp:
         self.progresso_estimado = 0
         self.saida_execucao_atual = []
         self.linhas_revisao_cache = {}
+        self.workflow = None
+        self._pagina_apos_popup = None
+        self._ultima_linha_loading = ""
 
     def run(self):
         porta = self._encontrar_porta_livre()
@@ -80,40 +85,15 @@ class IntegracaoEnriquecimentoApp:
     def _configurar_tema(self):
         ui.page_title("Integração e Enriquecimento")
         ui.colors(
-            primary="#2563eb",
-            secondary="#475569",
-            accent="#0f766e",
+            primary="#5f489d",
+            secondary="#6d6e71",
+            accent="#3e0565",
             positive="#16a34a",
-            negative="#dc2626",
+            negative="#ff3333",
             warning="#d97706",
         )
-        ui.add_head_html(
-            """
-            <style>
-              body {
-                background: #f8fafc;
-                color: #0f172a;
-                font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-              }
-              .nicegui-content {
-                max-width: 1380px;
-                margin: 0 auto;
-              }
-              .q-card {
-                border-radius: 10px;
-                box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-              }
-              .q-field__label,
-              .q-table th {
-                font-weight: 600;
-                color: #475569;
-              }
-              .q-table tbody td {
-                color: #1e293b;
-              }
-            </style>
-            """
-        )
+        ui.add_head_html(FONTES_CSS)
+        ui.add_head_html(APP_CSS)
 
     def _montar_dialogos(self):
         self.login_dialog, self.nome_usuario_input, self.senha_input, self.login_erro_label = montar_login(
@@ -134,41 +114,42 @@ class IntegracaoEnriquecimentoApp:
                 ui.button("Cancelar", on_click=self.dialog_pasta_trabalho.close).props("flat")
                 ui.button("Usar Pasta", on_click=self.confirmar_pasta_trabalho).props("color=primary unelevated")
 
-        self.dialog_download_revisado = ui.dialog()
+        self.dialog_download_revisado = ui.dialog().props("persistent")
         with self.dialog_download_revisado, ui.card().classes("w-[460px] gap-4 rounded-lg"):
             ui.label("Arquivo Revisado Gerado").classes("text-xl font-semibold text-slate-900")
             self.download_revisado_label = ui.label("").classes("text-sm text-slate-600")
             with ui.row().classes("w-full justify-end gap-2"):
-                ui.button("Fechar", on_click=self.dialog_download_revisado.close).props("flat")
-                ui.button("Baixar Arquivo", on_click=self.baixar_arquivo_revisado).props("color=primary unelevated")
+                ui.button("Fechar", on_click=lambda: self._fechar_popup(self.dialog_download_revisado)).props("flat")
 
-        self.dialog_resultado_enriquecimento = ui.dialog()
+        self.dialog_resultado_enriquecimento = ui.dialog().props("persistent")
         with self.dialog_resultado_enriquecimento, ui.card().classes("w-[560px] gap-4 rounded-lg"):
             ui.label("Resultado do Enriquecimento").classes("text-xl font-semibold text-slate-900")
             self.resultado_enriquecimento_area = ui.column().classes("w-full gap-2")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Fechar", on_click=self.dialog_resultado_enriquecimento.close).props("flat")
+                ui.button("Fechar", on_click=lambda: self._fechar_popup(self.dialog_resultado_enriquecimento)).props("flat")
 
-        self.dialog_resultado_base_imobiliaria = ui.dialog()
+        self.dialog_resultado_base_imobiliaria = ui.dialog().props("persistent")
         with self.dialog_resultado_base_imobiliaria, ui.card().classes("w-[560px] gap-4 rounded-lg"):
             ui.label("Resultado da Base Imobiliaria").classes("text-xl font-semibold text-slate-900")
             self.resultado_base_imobiliaria_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Fechar", on_click=self.dialog_resultado_base_imobiliaria.close).props("flat")
+                ui.button("Fechar", on_click=lambda: self._fechar_popup(self.dialog_resultado_base_imobiliaria)).props("flat")
 
-        self.dialog_resultado_parametros = ui.dialog()
+        self.dialog_resultado_parametros = ui.dialog().props("persistent")
         with self.dialog_resultado_parametros, ui.card().classes("w-[560px] gap-4 rounded-lg"):
             ui.label("Resultado da Parametrização").classes("text-xl font-semibold text-slate-900")
             self.resultado_parametros_label = ui.label("").classes("whitespace-pre-wrap text-sm text-slate-700")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Fechar", on_click=self.dialog_resultado_parametros.close).props("flat")
+                ui.button("Fechar", on_click=lambda: self._fechar_popup(self.dialog_resultado_parametros)).props("flat")
 
         self.bloqueio = ui.dialog().props("persistent")
         with self.bloqueio, ui.card().classes("w-[520px] gap-4 rounded-lg"):
-            ui.label("Execução em Andamento").classes("text-lg font-semibold text-slate-900")
+            self.loading_titulo = ui.label("Execução em Andamento").classes("text-lg font-semibold text-slate-900")
             self.progresso_texto = ui.label("Aguardando...")
             self.progresso_barra = ui.linear_progress(value=0).props("instant-feedback").classes("w-full")
-            self.progresso_linha = ui.label("").classes("text-sm text-slate-600")
+            self.progresso_linha = ui.label("").classes("whitespace-pre-wrap max-h-[50vh] overflow-auto w-full break-words text-sm text-slate-600")
+            with ui.row().classes("w-full justify-end"):
+                self.botao_fechar_loading = ui.button("Fechar", on_click=lambda: self._fechar_popup(self.bloqueio)).props("flat")
 
         self.dialog_logs_processamento = ui.dialog().props("persistent")
         with self.dialog_logs_processamento, ui.card().classes("w-[760px] max-w-[92vw] gap-4 rounded-lg"):
@@ -185,123 +166,13 @@ class IntegracaoEnriquecimentoApp:
             with ui.row().classes("w-full justify-end"):
                 self.botao_fechar_logs_processamento = ui.button(
                     "Fechar",
-                    on_click=self.dialog_logs_processamento.close,
+                    on_click=lambda: self._fechar_popup(self.dialog_logs_processamento),
                 ).props("flat")
 
     def _montar_layout(self):
-        with ui.column().classes("w-full gap-5 p-6"):
-            with ui.column().classes("gap-1"):
-                ui.label("Integração e Enriquecimento").classes("text-3xl font-bold text-slate-950")
-                ui.label("Execute a preparação, o enriquecimento e a revisão dos dados integrados.").classes(
-                    "text-sm text-slate-600"
-                )
+        self.workflow = WorkflowView(self)
+        self.workflow.montar()
 
-            self.usuario_logado_label = ui.label("Usuário: não autenticado").classes(
-                "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
-            )
-
-            self._montar_cards_status()
-            self._montar_card_entrada()
-            self._montar_card_processamento_legado()
-            self._montar_card_configuracoes()
-            self._montar_card_execucao()
-            self.area_revisao = ui.column().classes("w-full gap-4")
-
-    def _montar_cards_status(self):
-        with ui.row().classes("w-full gap-3"):
-            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
-                ui.label("Preparação").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                self.card_preparacao = ui.label("").classes("text-xl font-semibold text-slate-900")
-            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
-                ui.label("Enriquecimento").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                self.card_enriquecimento = ui.label("").classes("text-xl font-semibold text-slate-900")
-            with ui.card().classes("flex-1 gap-1 border border-slate-200 bg-white"):
-                ui.label("Revisão Humana").classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                self.card_revisao = ui.label("").classes("text-xl font-semibold text-slate-900")
-
-    def _montar_card_entrada(self):
-        with ui.card().classes("w-full gap-3 border border-slate-200 bg-white"):
-            ui.label("Pasta de Trabalho").classes("text-xl font-semibold text-slate-900")
-            self.pasta_trabalho_label = ui.label("").classes("text-sm font-medium text-slate-700")
-            self.arquivos_entrada_label = ui.label("Nenhum CSV carregado.").classes("text-sm text-slate-600")
-            self.botao_pasta_trabalho = ui.button(
-                "Selecionar Pasta de Trabalho",
-                on_click=self.abrir_selecao_pasta_trabalho,
-            ).props("color=primary unelevated")
-
-    def _montar_card_processamento_legado(self):
-        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
-            ui.label("Processamento dos Arquivos Originais").classes("text-xl font-semibold text-slate-900")
-            ui.label(
-                "Executa os algoritmos antigos: leitura dos parâmetros, extração, padronização, pseudonimização e exportação."
-            ).classes("text-sm text-slate-600")
-            with ui.row().classes("w-full gap-3 items-end"):
-                self.chave_legado_input = ui.input(
-                    "Chave de pseudonimização",
-                    password=True,
-                    password_toggle_button=True,
-                ).props("outlined dense").classes("flex-1")
-                self.botao_processamento_legado = ui.button(
-                    "Processar Arquivos Originais",
-                    on_click=self.abrir_confirmacao_processamento_legado,
-                ).props("color=primary unelevated")
-                self.botao_gerar_parametros = ui.button(
-                    "Gerar Parâmetros",
-                    on_click=self.gerar_parametros,
-                ).props("color=secondary unelevated")
-            self.processamento_legado_status = ui.label("").classes("text-sm text-slate-600")
-
-    def _montar_card_configuracoes(self):
-        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
-            ui.label("Configurações do Enriquecimento").classes("text-xl font-semibold text-slate-900")
-            config = self.config_service.carregar()
-            with ui.grid(columns=5).classes("w-full gap-3"):
-                for chave, rotulo in [
-                    ("threshold_similaridade", "Merge Automático (%)"),
-                    ("threshold_revisar", "Revisão Humana (%)"),
-                    ("threshold_apoio_nome", "Nome (%)"),
-                    ("threshold_apoio_telefone", "Telefone (%)"),
-                    ("threshold_apoio_email", "E-mail (%)"),
-                    ("threshold_apoio_nascimento", "Nascimento (%)"),
-                    ("threshold_apoio_endereco", "Endereço (%)"),
-                    ("threshold_apoio_numero", "Número (%)"),
-                    ("threshold_apoio_identificador_documento", "Identificador (%)"),
-                    ("max_pares_por_valor_bloco", "Máx. Pares por Bloco"),
-                ]:
-                    self.campos_config[chave] = ui.number(rotulo, value=int(config[chave]), min=0).props(
-                        "outlined dense"
-                    )
-            self.botao_salvar_config = ui.button("Salvar Configuração", on_click=self.salvar_config_ui).props(
-                "color=primary unelevated"
-            )
-
-    def _montar_card_execucao(self):
-        with ui.card().classes("w-full gap-4 border border-slate-200 bg-white"):
-            ui.label("Executar Integração").classes("text-xl font-semibold text-slate-900")
-            with ui.row().classes("w-full gap-3"):
-                self.botao_preparacao = ui.button(
-                    "Iniciar Preparação",
-                    on_click=self.abrir_confirmacao_preparacao,
-                ).props("color=primary unelevated")
-                self.botao_enriquecimento = ui.button(
-                    "Iniciar Enriquecimento",
-                    on_click=self.abrir_confirmacao_enriquecimento,
-                ).props("color=primary unelevated")
-                self.botao_revisao = ui.button("Iniciar Revisão", on_click=self.iniciar_revisao).props(
-                    "color=primary unelevated"
-                )
-                self.botao_base_imobiliario_modulo_iv = ui.button(
-                    "Gerar Base Imobiliária",
-                    on_click=self.gerar_base_imobiliario_modulo_iv,
-                ).props("color=primary unelevated")
-                self.botao_reidentificacao = ui.button(
-                    "Reidentificar Base",
-                    on_click=self.reidentificar_base,
-                ).props("color=primary unelevated")
-                self.botao_download_base_imobiliaria = ui.button(
-                    "Baixar Base Imobiliária",
-                    on_click=self.baixar_base_imobiliaria_reidentificada,
-                ).props("color=primary unelevated")
     def autenticar_usuario(self):
         usuario = texto_valor(self.nome_usuario_input.value)
         senha = texto_valor(self.senha_input.value)
@@ -355,6 +226,8 @@ class IntegracaoEnriquecimentoApp:
         self._atualizar_status_entrada()
         self._atualizar_status()
         self._atualizar_botoes()
+        if self.workflow is not None:
+            self.workflow.retomar()
         ui.notify(f"Pasta de trabalho definida: {self.paths.work_dir}")
 
     def salvar_config_ui(self):
@@ -479,11 +352,11 @@ class IntegracaoEnriquecimentoApp:
 
             self._atualizar_loading("Parametrização: 100%", mensagem, 100)
             self.resultado_parametros_label.set_text(mensagem)
-            self.dialog_resultado_parametros.open()
+            self._mostrar_popup_resultado(self.dialog_resultado_parametros)
             ui.notify("Parâmetros gerados.")
         finally:
             self.state.rodando = False
-            self._fechar_bloqueio()
+            self._finalizar_loading()
             self._atualizar_status_entrada()
             self._atualizar_botoes()
 
@@ -538,7 +411,7 @@ class IntegracaoEnriquecimentoApp:
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", f"Script não encontrado: {script}.", 0)
             ui.notify(f"Script não encontrado: {script}.")
             self.state.rodando = False
-            self._fechar_bloqueio()
+            self._finalizar_loading()
             self._atualizar_status()
             self._atualizar_botoes()
             return
@@ -551,21 +424,25 @@ class IntegracaoEnriquecimentoApp:
             self.progresso_estimado = self._calcular_progresso(linha, self.progresso_estimado)
             self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: {self.progresso_estimado}%", linha, self.progresso_estimado)
 
-        codigo = await self.pipeline_runner.executar(script, ao_progredir)
-        mostrar_resultado_enriquecimento = codigo == 0 and numero_execucao == 2
-
-        if codigo == 0:
-            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Concluída", "Processo finalizado.", 100)
-        else:
-            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", "Processo finalizado com erro.", self.progresso_estimado)
-
-        ui.notify(f"{self._nome_execucao(numero_execucao)} {'concluída' if codigo == 0 else 'terminou com erro'}.")
-        self.state.rodando = False
-        self._fechar_bloqueio()
-        self._atualizar_status()
-        self._atualizar_botoes()
-        if mostrar_resultado_enriquecimento:
-            self._mostrar_resultado_enriquecimento()
+        try:
+            codigo = await self.pipeline_runner.executar(script, ao_progredir)
+            if codigo == 0:
+                self._pagina_apos_popup = "enriquecimento" if numero_execucao == 1 else "revisao"
+                self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Concluída", "Processo finalizado.", 100)
+                if numero_execucao == 2:
+                    self._mostrar_resultado_enriquecimento()
+            else:
+                detalhes = "\n".join(self.saida_execucao_atual[-8:]) or "Processo finalizado com erro."
+                self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", detalhes, self.progresso_estimado)
+            ui.notify(f"{self._nome_execucao(numero_execucao)} {'concluída' if codigo == 0 else 'terminou com erro'}.")
+        except Exception as erro:
+            self._pagina_apos_popup = None
+            self._atualizar_loading(f"{self._nome_execucao(numero_execucao)}: Erro", str(erro), self.progresso_estimado)
+        finally:
+            self.state.rodando = False
+            self._finalizar_loading()
+            self._atualizar_status()
+            self._atualizar_botoes()
 
     def _calcular_progresso(self, texto: str, progresso_atual: int) -> int:
         percentual = extrair_porcentagem(texto)
@@ -592,7 +469,7 @@ class IntegracaoEnriquecimentoApp:
                     if linha.strip():
                         ui.label(linha).classes("font-mono text-xs text-slate-700")
 
-        self.dialog_resultado_enriquecimento.open()
+        self._mostrar_popup_resultado(self.dialog_resultado_enriquecimento)
 
     def _extrair_resumo_enriquecimento(self) -> list[tuple[str, str]]:
         linhas = [linha.strip() for linha in self.saida_execucao_atual if linha.strip()]
@@ -640,6 +517,10 @@ class IntegracaoEnriquecimentoApp:
         return resultado
 
     def _abrir_loading(self, titulo: str, linha: str):
+        self._pagina_apos_popup = None
+        self._ultima_linha_loading = linha
+        self._executar_ui(lambda: self.loading_titulo.set_text("Execução em Andamento"))
+        self._executar_ui(self.botao_fechar_loading.disable)
         if not self._executar_ui(lambda: setattr(self.progresso_barra, "value", 0)):
             return False
         if not self._executar_ui(lambda: self.progresso_texto.set_text(titulo)):
@@ -649,11 +530,30 @@ class IntegracaoEnriquecimentoApp:
         return self._executar_ui(self.bloqueio.open)
 
     def _atualizar_loading(self, titulo: str, linha: str, percentual: int):
+        self._ultima_linha_loading = linha or "Processando..."
         if not self._executar_ui(lambda: setattr(self.progresso_barra, "value", max(0, min(100, percentual)))):
             return False
         if not self._executar_ui(lambda: self.progresso_texto.set_text(titulo)):
             return False
-        return self._executar_ui(lambda: self.progresso_linha.set_text(linha[-220:] if linha else "Processando..."))
+        return self._executar_ui(lambda: self.progresso_linha.set_text(self._ultima_linha_loading[-220:]))
+
+    def _finalizar_loading(self):
+        self._executar_ui(lambda: self.loading_titulo.set_text("Resultado da Execução"))
+        self._executar_ui(lambda: self.progresso_linha.set_text(self._ultima_linha_loading))
+        return self._executar_ui(self.botao_fechar_loading.enable)
+
+    def _mostrar_popup_resultado(self, dialog):
+        self._fechar_bloqueio()
+        self._executar_ui(dialog.open)
+
+    def _fechar_popup(self, dialog):
+        if self.state.rodando:
+            return
+        pagina = self._pagina_apos_popup
+        self._pagina_apos_popup = None
+        dialog.close()
+        if pagina is not None and self.workflow is not None:
+            self.workflow.exibir(pagina)
 
     def _fechar_bloqueio(self):
         return self._executar_ui(self.bloqueio.close)
@@ -675,6 +575,7 @@ class IntegracaoEnriquecimentoApp:
             raise
 
     def _abrir_logs_processamento(self):
+        self._pagina_apos_popup = None
         self.saida_execucao_atual = []
         self.logs_processamento_titulo.set_text("Processamento dos Arquivos Originais")
         self.logs_processamento_status.set_text("Executando...")
@@ -726,15 +627,18 @@ class IntegracaoEnriquecimentoApp:
         self.linhas_revisao_cache = {}
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading("Carregando Revisão Humana...", f"Lendo {self.paths.arquivo_enriquecimento}.")
+        self._abrir_loading("Carregando Revisão Manual...", f"Lendo {self.paths.arquivo_enriquecimento}.")
+        revisao_carregada = False
 
         try:
             df, pares, decisoes, indice_atual, total_grupos, proximo_offset, linhas_cache = await asyncio.to_thread(
                 self.preparar_revisao
             )
         except (FileNotFoundError, PermissionError, ValueError) as erro:
+            self._atualizar_loading("Revisão Manual: Erro", str(erro), 0)
             self._executar_ui(lambda: ui.notify(str(erro)))
         except Exception as erro:
+            self._atualizar_loading("Revisão Manual: Erro", str(erro), 0)
             self._executar_ui(lambda: ui.notify(f"Erro ao carregar revisão: {erro}"))
         else:
             self.state.df = df
@@ -744,15 +648,16 @@ class IntegracaoEnriquecimentoApp:
             self.state.total_grupos_revisao = total_grupos
             self.state.offset_grupos_revisao = proximo_offset
             self.state.etapa3_ativa = True
+            if self.workflow is not None:
+                self.workflow.pasta_revisao = self.paths.work_dir
             self._atualizar_cache_linhas_revisao(linhas_cache)
-            self._executar_ui(
-                lambda: ui.notify(
-                    f"Revisão carregada: {len(self._agrupar_pares(pares))} de {total_grupos} grupo(s)."
-                )
-            )
+            revisao_carregada = True
         finally:
             self.state.rodando = False
-            self._fechar_bloqueio()
+            if revisao_carregada:
+                self._fechar_bloqueio()
+            else:
+                self._finalizar_loading()
             self._atualizar_status()
             self._atualizar_botoes()
             if self.state.etapa3_ativa:
@@ -883,7 +788,7 @@ class IntegracaoEnriquecimentoApp:
 
         self.state.rodando = True
         self._atualizar_botoes()
-        self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão humana.")
+        self._abrir_loading("Gerando Arquivo Revisado...", "Aplicando decisões da revisão manual.")
         self.saida_execucao_atual = []
         saida_anterior = os.environ.get("AVALIADOR_ARQUIVO_REVISAO_SAIDA")
         os.environ["AVALIADOR_ARQUIVO_REVISAO_SAIDA"] = arquivo_saida
@@ -913,10 +818,11 @@ class IntegracaoEnriquecimentoApp:
         else:
             self.state.arquivo_revisao_atual = resultado.get("saida", arquivo_saida)
             self._atualizar_loading("Geração do Arquivo Revisado: 100%", "Arquivo revisado gerado com sucesso.", 100)
-            self._fechar_bloqueio()
+            if self.workflow is not None:
+                self._pagina_apos_popup = self.workflow._proxima_pagina()
             self.download_revisado_label.set_text(f"O arquivo foi salvo em {self.state.arquivo_revisao_atual}.")
             ui.notify(f"Arquivo salvo: {self.state.arquivo_revisao_atual}.")
-            self.dialog_download_revisado.open()
+            self._mostrar_popup_resultado(self.dialog_download_revisado)
         finally:
             if saida_anterior is None:
                 os.environ.pop("AVALIADOR_ARQUIVO_REVISAO_SAIDA", None)
@@ -924,7 +830,7 @@ class IntegracaoEnriquecimentoApp:
                 os.environ["AVALIADOR_ARQUIVO_REVISAO_SAIDA"] = saida_anterior
             self.state.rodando = False
             self._atualizar_botoes()
-            self._fechar_bloqueio()
+            self._finalizar_loading()
 
     def baixar_arquivo_revisado(self):
         arquivo = self.state.arquivo_revisao_atual or self._arquivo_revisao_existente()
@@ -938,27 +844,37 @@ class IntegracaoEnriquecimentoApp:
             return
         ui.download(str(caminho), filename=caminho.name)
 
-    def baixar_base_imobiliaria_reidentificada(self):
-        arquivo = self.paths.arquivo_base_imobiliario_reidentificada
-        if not self.paths.existe(arquivo):
-            ui.notify("Reidentifique a base imobiliária antes de baixar.")
+    async def baixar_base_imobiliaria_reidentificada(self):
+        if self.state.rodando or not self._chave_para_reidentificacao():
             return
+        resultado = await self.gerar_base_imobiliario_modulo_iv(mostrar_resultado=False)
+        if resultado is not None:
+            await self.reidentificar_base("imobiliaria", resumo_imobiliario=self._resumo_base_imobiliaria(resultado))
 
-        caminho = self.paths.resolver(arquivo)
-        ui.download(str(caminho), filename=caminho.name)
+    async def baixar_base_integrada_reidentificada(self):
+        await self.reidentificar_base("integrada")
 
-    async def reidentificar_base(self):
-        if self.state.rodando:
-            return
-
+    def _chave_para_reidentificacao(self) -> str:
         chave = texto_valor(self.chave_legado_input.value)
         if len(chave) < 8:
             ui.notify("Informe a chave de pseudonimização usada no processamento original.")
+            return ""
+        return chave
+
+    async def reidentificar_base(self, base: str = "integrada", resumo_imobiliario: str = ""):
+        if self.state.rodando:
+            return
+
+        chave = self._chave_para_reidentificacao()
+        if not chave:
             return
 
         arquivo_entrada = self._arquivo_revisao_existente()
         if not arquivo_entrada:
             ui.notify("Gere o arquivo final ou parcial antes de reidentificar a base.")
+            return
+        if base == "imobiliaria" and not self.paths.existe(self.paths.arquivo_base_imobiliario_modulo_iv):
+            ui.notify("Gere a base imobiliária antes de baixar.")
             return
 
         self.state.rodando = True
@@ -986,22 +902,21 @@ class IntegracaoEnriquecimentoApp:
                 return
 
             resultado = self._extrair_resultado_reidentificacao()
+            campo_saida = "base_imobiliaria_saida" if base == "imobiliaria" else "saida"
+            arquivo_saida = resultado.get(campo_saida)
+            if not arquivo_saida or not self.paths.existe(arquivo_saida):
+                raise FileNotFoundError("A reidentificação não gerou o arquivo solicitado para download.")
+            caminho = self.paths.resolver(arquivo_saida)
         except Exception as erro:
             ui.notify(f"Erro ao reidentificar a base: {erro}")
             self._atualizar_loading("Reidentificação: Erro", str(erro), 0)
         else:
-            mensagem = (
-                f"{resultado.get('valores_reidentificados', 0)} valor(es) reidentificado(s). "
-                f"Arquivo salvo em {resultado.get('saida', self.paths.arquivo_integracao_reidentificada)}."
-            )
-            if resultado.get("base_imobiliaria_saida"):
-                mensagem += (
-                    f" Base imobiliária reidentificada em {resultado.get('base_imobiliaria_saida')} "
-                    f"com {resultado.get('base_imobiliaria_valores_reidentificados', 0)} CPF(s)."
-                )
+            campo_total = "base_imobiliaria_valores_reidentificados" if base == "imobiliaria" else "valores_reidentificados"
+            mensagem = f"{resultado.get(campo_total, 0)} valor(es) reidentificado(s). Arquivo salvo em {arquivo_saida}."
+            if resumo_imobiliario:
+                mensagem = f"{resumo_imobiliario}\n\n{mensagem}"
             self._atualizar_loading("Reidentificação: 100%", mensagem, 100)
             ui.notify(mensagem)
-            caminho = self.paths.resolver(resultado.get("saida", self.paths.arquivo_integracao_reidentificada))
             ui.download(str(caminho), filename=caminho.name)
         finally:
             if chave_anterior is None:
@@ -1009,10 +924,10 @@ class IntegracaoEnriquecimentoApp:
             else:
                 os.environ["key"] = chave_anterior
             self.state.rodando = False
-            self._fechar_bloqueio()
+            self._finalizar_loading()
             self._atualizar_botoes()
 
-    async def gerar_base_imobiliario_modulo_iv(self):
+    async def gerar_base_imobiliario_modulo_iv(self, mostrar_resultado: bool = True):
         if self.state.rodando:
             return
 
@@ -1054,18 +969,15 @@ class IntegracaoEnriquecimentoApp:
                 return
 
             resultado = self._extrair_resultado_modulo_iv()
-            mensagem = (
-                f"Telefones preenchidos: {resultado.get('celulares_preenchidos', 0)}\n"
-                f"E-mails preenchidos: {resultado.get('emails_preenchidos', 0)}\n"
-                f"Linhas com telefone adicionado pela integração: {resultado.get('telefones_enriquecidos', 0)}\n"
-                f"Aumento por telefone: {self._formatar_percentual(resultado.get('percentual_telefones_enriquecidos', 0))}\n"
-                f"Linhas com e-mail adicionado pela integração: {resultado.get('emails_enriquecidos', 0)}\n"
-                f"Aumento por e-mail: {self._formatar_percentual(resultado.get('percentual_emails_enriquecidos', 0))}"
-            )
+            if not resultado.get("saida") or not self.paths.existe(resultado["saida"]):
+                raise FileNotFoundError("A geração não produziu a base imobiliária solicitada.")
+            mensagem = self._resumo_base_imobiliaria(resultado)
             self._atualizar_loading("Base Imobiliária: 100%", mensagem, 100)
-            if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
-                self._executar_ui(self.dialog_resultado_base_imobiliaria.open)
+            if mostrar_resultado and self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
+                self._mostrar_popup_resultado(self.dialog_resultado_base_imobiliaria)
+            return resultado
         except Exception as erro:
+            self._pagina_apos_popup = None
             erro_terminal = traceback.format_exc()
             mensagem_erro = self._mensagem_erro_modulo_iv(erro_terminal)
             self._imprimir_erro_modulo_iv(erro_terminal)
@@ -1078,8 +990,18 @@ class IntegracaoEnriquecimentoApp:
             else:
                 os.environ["key"] = chave_anterior
             self.state.rodando = False
-            self._fechar_bloqueio()
+            self._finalizar_loading()
             self._executar_ui(self._atualizar_botoes)
+
+    def _resumo_base_imobiliaria(self, resultado: dict) -> str:
+        return (
+            f"Telefones preenchidos: {resultado.get('celulares_preenchidos', 0)}\n"
+            f"E-mails preenchidos: {resultado.get('emails_preenchidos', 0)}\n"
+            f"Linhas com telefone adicionado pela integração: {resultado.get('telefones_enriquecidos', 0)}\n"
+            f"Aumento por telefone: {self._formatar_percentual(resultado.get('percentual_telefones_enriquecidos', 0))}\n"
+            f"Linhas com e-mail adicionado pela integração: {resultado.get('emails_enriquecidos', 0)}\n"
+            f"Aumento por e-mail: {self._formatar_percentual(resultado.get('percentual_emails_enriquecidos', 0))}"
+        )
 
     def _extrair_resultado_modulo_iv(self) -> dict:
         prefixo = "RESULTADO_MODULO_IV_JSON="
@@ -1115,7 +1037,7 @@ class IntegracaoEnriquecimentoApp:
 
     def _exibir_resultado_base_imobiliaria(self, mensagem: str):
         if self._executar_ui(lambda: self.resultado_base_imobiliaria_label.set_text(mensagem)):
-            self._executar_ui(self.dialog_resultado_base_imobiliaria.open)
+            self._mostrar_popup_resultado(self.dialog_resultado_base_imobiliaria)
 
     def _formatar_percentual(self, valor) -> str:
         try:
@@ -1159,25 +1081,26 @@ class IntegracaoEnriquecimentoApp:
 
     def _desenhar_revisao(self):
         self.area_revisao.clear()
+        if self.workflow is not None:
+            self.workflow.atualizar()
 
         with self.area_revisao:
-            if not self.state.etapa3_ativa:
+            if not self.state.etapa3_ativa or (
+                self.workflow is not None and not self.workflow.revisao_da_pasta_atual()
+            ):
                 self.area_revisao.update()
                 return
 
-            ui.separator()
-            ui.label("Revisão Humana").classes("text-2xl font-bold text-slate-900")
-
             pares = self.state.pares
             if not pares:
-                ui.label("Nenhum candidato de revisão encontrado.").classes("text-slate-600")
+                ui.label("Nenhum candidato de revisão encontrado.").classes("workflow-review-placeholder")
                 self.area_revisao.update()
                 return
 
             grupos = self._agrupar_pares(pares)
             self._montar_resumo_revisao(pares, grupos)
             if self.state.carregando_lote_revisao:
-                ui.label("Carregando prÃ³ximo lote de revisÃ£o...").classes("text-sm text-slate-600")
+                ui.label("Carregando próximo lote de revisão...").classes("text-sm")
             self._montar_par_atual(pares, grupos)
 
         self.area_revisao.update()
@@ -1200,18 +1123,17 @@ class IntegracaoEnriquecimentoApp:
         aprovados = sum(1 for item in self.state.decisoes.values() if item.get("decisao") == "aprovar")
         rejeitados = sum(1 for item in self.state.decisoes.values() if item.get("decisao") == "rejeitar")
 
-        with ui.row().classes("w-full gap-3"):
+        with ui.element("div").classes("review-summary"):
             for titulo, valor in [
                 ("Pares", total_pares),
-                ("Carregados", total_carregados),
                 ("Pares pendentes", pares_pendentes),
                 ("Pares decididos", pares_decididos),
                 ("Aprovados", aprovados),
                 ("Rejeitados", rejeitados),
             ]:
-                with ui.card().classes("min-w-[150px] gap-1 rounded-lg shadow-sm border border-slate-200 bg-white"):
-                    ui.label(titulo).classes("text-xs font-medium uppercase tracking-wide text-slate-500")
-                    ui.label(str(valor)).classes("text-2xl font-semibold text-slate-900")
+                with ui.element("div").classes("review-stat"):
+                    ui.label(titulo).classes("review-stat-title")
+                    ui.label(str(valor)).classes("review-stat-value")
 
     def _montar_par_atual(self, pares: list[dict], grupos: dict):
         indice = min(self.state.indice_atual, len(pares) - 1)
@@ -1225,13 +1147,13 @@ class IntegracaoEnriquecimentoApp:
         decisao_atual = self.state.decisoes.get(par["par_id"], {}).get("decisao", "pendente")
         observacao_atual = self.state.decisoes.get(par["par_id"], {}).get("observacao", "")
 
-        with ui.card().classes("w-full gap-3"):
-            with ui.row().classes("w-full items-center justify-between"):
+        with ui.card().classes("review-pair"):
+            with ui.element("div").classes("review-pair-navigation"):
                 ui.button("Anterior", on_click=lambda: self.mudar_indice(-1)).props("outline color=primary")
                 ui.label(
                     f"Par {numero_par} de {total_pares} | Linha {indice + 1} de {len(pares)} | "
                     f"Grupo {par['id_revisao']} | Status {decisao_atual.capitalize()}"
-                ).classes("font-semibold text-slate-900")
+                ).classes("review-pair-title")
                 ui.button("Próximo", on_click=lambda: self.mudar_indice(1)).props("outline color=primary")
 
             ui.label(
@@ -1239,30 +1161,15 @@ class IntegracaoEnriquecimentoApp:
                 f"Índice inválido: {par['idx_invalido']} | "
                 f"Score: {formatar_score(par.get('score_revisao', ''))} | "
                 f"Merge key: {texto_valor(linha_valida[COLUNA_MERGE_KEY])}"
-            ).classes("text-sm text-slate-600")
+            ).classes("review-pair-metadata")
 
             self._montar_registros_lado_a_lado(linha_valida, linha_invalida)
 
-            colunas = [
-                {"name": "coluna", "label": "Coluna", "field": "coluna", "align": "left"},
-                {"name": "valido", "label": "Válido", "field": "valido", "align": "left"},
-                {"name": "invalido", "label": "Inválido", "field": "invalido", "align": "left"},
-                {"name": "situacao", "label": "Situação", "field": "situacao", "align": "left"},
-            ]
-
             campo_observacao = ui.textarea("Observações da decisão", value=observacao_atual).props(
                 "outlined autogrow"
-            ).classes("w-full")
+            ).classes("review-notes workflow-field")
 
-            with ui.row().classes("w-full justify-end gap-2"):
-                ui.button(
-                    "Gerar Arquivo Revisado",
-                    on_click=self.solicitar_geracao_arquivo_revisado,
-                ).props("outline color=primary")
-                ui.button("Baixar Arquivo Revisado", on_click=self.baixar_arquivo_revisado).props(
-                    "outline color=primary"
-                )
-                ui.button("Pausar Revisão", on_click=self.pausar_revisao).props("outline color=secondary")
+            with ui.element("div").classes("review-actions"):
                 ui.button(
                     "Rejeitar Merge",
                     on_click=lambda: self.decidir("rejeitar", campo_observacao.value),
@@ -1278,19 +1185,19 @@ class IntegracaoEnriquecimentoApp:
             {"name": "valor", "label": "Valor", "field": "valor", "align": "left"},
         ]
 
-        with ui.row().classes("w-full gap-3 items-start"):
-            with ui.card().classes("flex-1 min-w-0 gap-2 border border-slate-200 bg-white shadow-none"):
-                ui.label("Registro válido").classes("text-sm font-semibold text-slate-900")
-                with ui.element("div").classes("w-full max-h-[420px] overflow-y-auto rounded-lg border border-slate-200"):
+        with ui.element("div").classes("review-records"):
+            with ui.column().classes("review-record"):
+                ui.label("Registro válido").classes("review-record-title")
+                with ui.element("div").classes("review-table"):
                     ui.table(
                         columns=colunas,
                         rows=self._linhas_registro(linha_valida),
                         pagination=self._paginacao_tabela_revisao(),
                     ).classes("w-full")
 
-            with ui.card().classes("flex-1 min-w-0 gap-2 border border-slate-200 bg-white shadow-none"):
-                ui.label("Registro inválido").classes("text-sm font-semibold text-slate-900")
-                with ui.element("div").classes("w-full max-h-[420px] overflow-y-auto rounded-lg border border-slate-200"):
+            with ui.column().classes("review-record"):
+                ui.label("Registro inválido").classes("review-record-title")
+                with ui.element("div").classes("review-table"):
                     ui.table(
                         columns=colunas,
                         rows=self._linhas_registro(linha_invalida),
@@ -1342,7 +1249,6 @@ class IntegracaoEnriquecimentoApp:
 
     def _atualizar_botoes(self):
         preparacao_existe = self.paths.existe(self.paths.arquivo_preparacao)
-        enriquecimento_existe = self.paths.existe(self.paths.arquivo_enriquecimento)
         imobiliario_existe = self.paths.existe(os.path.join(self.paths.pasta_dados_processados, "imobiliario.csv"))
         arquivo_revisao_existe = bool(self._arquivo_revisao_existente())
         entrada_existe = bool(self.entrada_service.listar_csvs())
@@ -1354,23 +1260,21 @@ class IntegracaoEnriquecimentoApp:
         self._definir_habilitado(self.botao_gerar_parametros, self._pode_gerar_parametros())
         self._definir_habilitado(self.botao_preparacao, autenticado and not rodando and entrada_existe)
         self._definir_habilitado(self.botao_enriquecimento, autenticado and not rodando and preparacao_existe)
-        self._definir_habilitado(self.botao_revisao, autenticado and not rodando and enriquecimento_existe)
         self._definir_habilitado(
-            self.botao_reidentificacao,
+            self.botao_download_base_integrada,
             autenticado and not rodando and arquivo_revisao_existe,
         )
         self._definir_habilitado(
-            self.botao_base_imobiliario_modulo_iv,
-            autenticado and not rodando and imobiliario_existe and arquivo_revisao_existe,
-        )
-        self._definir_habilitado(
             self.botao_download_base_imobiliaria,
-            autenticado and not rodando and self.paths.existe(self.paths.arquivo_base_imobiliario_reidentificada),
+            autenticado and not rodando and arquivo_revisao_existe
+            and imobiliario_existe,
         )
         self._definir_habilitado(
             self.botao_salvar_config,
             autenticado and not rodando and self.state.pasta_trabalho_selecionada,
         )
+        if self.workflow is not None:
+            self.workflow.atualizar()
 
     def _definir_habilitado(self, elemento, habilitado: bool):
         if habilitado:

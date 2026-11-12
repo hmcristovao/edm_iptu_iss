@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-Este projeto organiza um fluxo de preparação, padronização, pseudonimização, enriquecimento, revisão humana, reidentificação e geração de uma base imobiliária enriquecida.
+Este projeto organiza um fluxo de preparação, padronização, pseudonimização, enriquecimento, revisão manual, reidentificação e geração de uma base imobiliária enriquecida.
 
 O uso recomendado é pela interface NiceGUI. Ela centraliza a escolha da pasta de trabalho, executa as etapas em sequência e registra os principais arquivos gerados.
 
@@ -117,7 +117,7 @@ $env:APP_SENHA_PADRAO = "nova_senha"
 python app_nicegui.py
 ```
 
-O nome informado no login é usado na auditoria da revisão humana.
+O nome informado no login é usado na auditoria da revisão manual.
 
 ## Fluxo Pela Interface
 
@@ -182,7 +182,7 @@ arquivos_gerados/integracao_config.json
 Campos principais:
 
 - `threshold_similaridade`: score mínimo para merge automático.
-- `threshold_revisar`: score mínimo para enviar à revisão humana.
+- `threshold_revisar`: score mínimo para enviar à revisão manual.
 - `threshold_apoio_nome`: apoio por nome.
 - `threshold_apoio_telefone`: apoio por telefone.
 - `threshold_apoio_email`: apoio por e-mail.
@@ -212,7 +212,7 @@ arquivos_gerados/integracao_log_merges.csv
 logs/integracao_enriquecimento_log.txt
 ```
 
-Nessa etapa, o sistema compara registros, calcula scores, aplica merges automáticos e marca pares que precisam de revisão humana.
+Nessa etapa, o sistema compara registros, calcula scores, aplica merges automáticos e marca pares que precisam de revisão manual.
 
 ### 7. Iniciar Revisão
 
@@ -253,9 +253,11 @@ arquivos_gerados/integracao_parcial.csv
 
 Se ainda houver revisões pendentes, a saída é parcial. Se não houver pendências, a saída é final.
 
-### 8. Gerar Base Imobiliária
+### 8. Download das Bases
 
-Clique em `Gerar Base Imobiliária` após gerar a base final ou parcial.
+Após salvar a revisão, a última tela apresenta dois cards: `Baixar base imobiliária` e `Baixar base integrada`. Informe a chave de pseudonimização nessa tela.
+
+O botão da base imobiliária gera a base, reidentifica seus CPFs e baixa o arquivo. O botão da base integrada reidentifica a integração final ou parcial e baixa essa cópia. Não existe uma página intermediária para executar a geração separadamente.
 
 Essa etapa combina o cadastro imobiliário processado com dados disponíveis na integração ainda pseudonimizada. As comparações por CPF usam o mesmo pseudônimo presente no imobiliário e na `merge_key`; CNPJs continuam em texto normalizado.
 
@@ -289,11 +291,11 @@ O módulo IV:
 - mantém informações de origem, `id_revisao`, usuário e data de revisão quando disponíveis;
 - ordena registros com CPF/CNPJ válido antes dos inválidos.
 
-### 9. Reidentificar Base
+#### Reidentificação Automática
 
-Clique em `Reidentificar Base` após gerar a base imobiliária.
+A reidentificação acontece automaticamente após clicar em um dos botões de download.
 
-Essa etapa usa a chave de pseudonimização para reidentificar CPFs em cópias das bases, sem modificar os arquivos pseudonimizados anteriores.
+Cada botão baixa apenas o arquivo escolhido. Essa etapa usa a chave de pseudonimização para reidentificar CPFs em cópias das bases, sem modificar os arquivos pseudonimizados anteriores. A opção da base imobiliária exige o cadastro processado e a integração revisada para gerar a base automaticamente; a base integrada pode ser baixada independentemente dessa geração.
 
 Entradas:
 
@@ -320,7 +322,7 @@ arquivos_gerados/integracao_reidentificada.csv
 arquivos_gerados/base_imobiliario_reidentificada.csv
 ```
 
-Após essa etapa, use `Baixar Base Imobiliária` para baixar a base imobiliária reidentificada.
+O download começa após a reidentificação terminar com sucesso. Se ocorrer um erro, nenhum arquivo antigo será baixado automaticamente.
 
 ## Regra Geral do Enriquecimento
 
@@ -341,9 +343,9 @@ e
 pelo menos uma regra de apoio válida
 ```
 
-Pares que passam de `threshold_revisar`, mas não cumprem merge automático, são encaminhados para revisão humana.
+Pares que passam de `threshold_revisar`, mas não cumprem merge automático, são encaminhados para revisão manual.
 
-## Auditoria da Revisão Humana
+## Auditoria da Revisão Manual
 
 Cada decisão registra:
 

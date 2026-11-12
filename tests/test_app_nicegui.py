@@ -1,9 +1,10 @@
+import asyncio
 import unittest
 import os
 from contextlib import redirect_stderr
 from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from src.views.app_nicegui import IntegracaoEnriquecimentoApp
 
@@ -59,7 +60,7 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         app.botao_preparacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_enriquecimento = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_revisao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
-        app.botao_reidentificacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_download_base_integrada = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_base_imobiliario_modulo_iv = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_download_base_imobiliaria = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_salvar_config = SimpleNamespace(
@@ -88,10 +89,10 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         app.botao_preparacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_enriquecimento = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_revisao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
-        app.botao_reidentificacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_download_base_integrada = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_salvar_config = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_download_base_imobiliaria = SimpleNamespace(enable=lambda: None, disable=lambda: None)
-        app.botao_base_imobiliario_modulo_iv = SimpleNamespace(
+        app.botao_download_base_imobiliaria = SimpleNamespace(
             enable=lambda: estados.append("enable"),
             disable=lambda: estados.append("disable"),
         )
@@ -108,7 +109,7 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
 
         self.assertEqual(estados, ["enable"])
 
-    def test_botao_baixar_base_imobiliaria_exige_base_reidentificada(self):
+    def test_botao_baixar_base_imobiliaria_exige_fontes_para_reidentificar(self):
         app = IntegracaoEnriquecimentoApp()
         estados = []
         app.botao_pasta_trabalho = SimpleNamespace(enable=lambda: None, disable=lambda: None)
@@ -117,7 +118,7 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         app.botao_preparacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_enriquecimento = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_revisao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
-        app.botao_reidentificacao = SimpleNamespace(enable=lambda: None, disable=lambda: None)
+        app.botao_download_base_integrada = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_base_imobiliario_modulo_iv = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_salvar_config = SimpleNamespace(enable=lambda: None, disable=lambda: None)
         app.botao_download_base_imobiliaria = SimpleNamespace(
@@ -127,22 +128,22 @@ class IntegracaoEnriquecimentoAppTest(unittest.TestCase):
         app.entrada_service.listar_csvs = lambda: []
         app.state.autenticado = True
         app.state.rodando = False
-        app.paths.existe = lambda caminho: caminho == app.paths.arquivo_base_imobiliario_reidentificada
+        app.paths.existe = lambda caminho: caminho in {
+            os.path.join(app.paths.pasta_dados_processados, "imobiliario.csv"), app.paths.arquivo_integracao_final,
+        }
 
         app._atualizar_botoes()
 
         self.assertEqual(estados, ["enable"])
 
-    def test_baixar_base_imobiliaria_usa_base_reidentificada(self):
+    def test_baixar_base_imobiliaria_solicita_reidentificacao_da_base_correta(self):
         app = IntegracaoEnriquecimentoApp()
-        chamadas = {}
-        app.paths.existe = lambda caminho: caminho == app.paths.arquivo_base_imobiliario_reidentificada
-
-        with patch("src.views.app_nicegui.ui.download") as download:
-            app.baixar_base_imobiliaria_reidentificada()
-
-        caminho = app.paths.resolver(app.paths.arquivo_base_imobiliario_reidentificada)
-        download.assert_called_once_with(str(caminho), filename=caminho.name)
+        app.chave_legado_input = SimpleNamespace(value="12345678")
+        app.gerar_base_imobiliario_modulo_iv = AsyncMock(return_value={"saida": "base.csv"})
+        app.reidentificar_base = AsyncMock()
+        asyncio.run(app.baixar_base_imobiliaria_reidentificada())
+        app.gerar_base_imobiliario_modulo_iv.assert_awaited_once_with(mostrar_resultado=False)
+        app.reidentificar_base.assert_awaited_once_with("imobiliaria", resumo_imobiliario=app._resumo_base_imobiliaria({"saida": "base.csv"}))
 
     def test_executar_ui_ignora_slot_deletado_do_nicegui(self):
         app = IntegracaoEnriquecimentoApp()
@@ -251,6 +252,7 @@ class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
         app._abrir_loading = lambda *args: None
         app._atualizar_loading = lambda *args: None
         app._fechar_bloqueio = lambda: None
+        app._finalizar_loading = lambda: None
         app._atualizar_botoes = lambda: None
         app.download_revisado_label = SimpleNamespace(set_text=lambda texto: chamadas.setdefault("label", texto))
         app.dialog_download_revisado = SimpleNamespace(open=lambda: chamadas.setdefault("dialog", True))
@@ -279,9 +281,11 @@ class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
             AssertionError("nao deve rodar no processo da interface")
         )
         app._arquivo_revisao_existente = lambda: "arquivos_gerados/integracao_parcial.csv"
+        app.paths.existe = lambda arquivo: os.path.normpath(arquivo) == os.path.normpath(app.paths.arquivo_integracao_reidentificada)
         app._abrir_loading = lambda *args: None
         app._atualizar_loading = lambda *args: None
         app._fechar_bloqueio = lambda: None
+        app._finalizar_loading = lambda: None
         app._atualizar_botoes = lambda: None
 
         with patch("src.views.app_nicegui.ui.notify"), patch("src.views.app_nicegui.ui.download") as download:
@@ -309,11 +313,13 @@ class IntegracaoEnriquecimentoAppAsyncTest(unittest.IsolatedAsyncioTestCase):
         app.paths.existe = lambda caminho: caminho in {
             os.path.join(app.paths.pasta_dados_processados, "imobiliario.csv"),
             app.paths.arquivo_integracao_final,
+            "arquivos_gerados/base_imobiliario_modulo_iv.csv",
         }
         app._arquivo_revisao_existente = lambda: app.paths.arquivo_integracao_final
         app._abrir_loading = lambda *args: None
         app._atualizar_loading = lambda *args: None
         app._fechar_bloqueio = lambda: None
+        app._finalizar_loading = lambda: None
         app._atualizar_botoes = lambda: None
         app.resultado_base_imobiliaria_label = SimpleNamespace(set_text=lambda texto: chamadas.setdefault("label", texto))
         app.dialog_resultado_base_imobiliaria = SimpleNamespace(open=lambda: chamadas.setdefault("dialog", True))

@@ -6,6 +6,7 @@ venv/
 dist/*
 build/*
 
+docs/
 arquivos_gerados/
 dados/
 modelos/
